@@ -29,3 +29,10 @@ dependencies = [
 packages = ["gce"]
 zip-safe = true
 package-dir = {"" = "src"}
+
+[project.gui-scripts]
+gce = "gce.__main__:main"
+
+[build-system]
+requires = ["setuptools>=80.9.0"]
+build-backend = "setuptools.build_meta"
