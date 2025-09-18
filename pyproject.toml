@@ -3,6 +3,9 @@ name = "gce"
 version = "0.0.1"
 description = "Galatea config editor"
 requires-python = ">= 3.12"
+maintainers = [
+    { name="Henry Borchers", email="hborcher@illinois.edu" }
+]
 authors = [
     {name="University Library at The University of Illinois at Urbana Champaign: Preservation Services", email="prescons@library.illinois.edu"}
 ]
@@ -17,6 +20,9 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: System :: Archiving"
 
+]
+dependencies = [
+    "pyside6-essentials>=6.9.2",
 ]
 
 [tool.setuptools]
