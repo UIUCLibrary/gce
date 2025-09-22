@@ -44,6 +44,11 @@ dev = [
     "ruff>=0.13.1",
 ]
 ci = [{include-group = "dev"}]
+freeze = [
+    "cmake>=4.1.0",
+    "jinja2>=3.1.6",
+    "pyinstaller>=6.16.0",
+]
 
 [tool.mypy]
 mypy_path = "src"
