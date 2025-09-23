@@ -1,3 +1,18 @@
+def createUVConfig(){
+    if (isUnix()){
+        if(! fileExists('ci/jenkins/scripts/create_uv_config.sh')){
+            checkout scm
+        }
+        return sh(label: 'Setting up uv.toml config file', script: 'sh ci/jenkins/scripts/create_uv_config.sh $UV_INDEX_URL $UV_EXTRA_INDEX_URL', returnStdout: true).trim()
+    } else {
+        if(! fileExists('ci/jenkins/scripts/new-uv-global-config.ps1')){
+            checkout scm
+        }
+        return powershell(label: 'Setting up uv.toml config file', script: 'ci/jenkins/scripts/new-uv-global-config.ps1 $env:UV_INDEX_URL $env:UV_EXTRA_INDEX_URL', returnStdout: true).trim()
+    }
+
+}
+
 def getVersion(){
     node(){
         checkout scm
@@ -54,6 +69,7 @@ pipeline {
                         UV_TOOL_DIR='/tmp/uvtools'
                         UV_PYTHON_INSTALL_DIR='/tmp/uvpython'
                         UV_CACHE_DIR='/tmp/uvcache'
+                        UV_CONFIG_FILE=createUVConfig()
                     }
                     agent {
                         docker{
@@ -131,6 +147,7 @@ pipeline {
                             cleanWs(
                                 deleteDirs: true,
                                 patterns: [
+                                    [pattern: 'uv.toml', type: 'INCLUDE'],
                                     [pattern: 'venv/', type: 'INCLUDE'],
                                     [pattern: '**/__pycache__/', type: 'INCLUDE'],
                                 ]
@@ -158,6 +175,9 @@ pipeline {
                         stage('Build Application Bundle'){
                             agent{
                                 label 'mac && python3 && x86_64'
+                            }
+                            environment{
+                                UV_CONFIG_FILE=createUVConfig()
                             }
                             steps{
                                 sh(label: 'Creating a .dmg installer', script: 'scripts/create_mac_distrib.sh')
@@ -203,6 +223,9 @@ pipeline {
                         stage('Build Application Bundle'){
                             agent{
                                 label 'mac && python3 && arm64'
+                            }
+                            environment{
+                                UV_CONFIG_FILE=createUVConfig()
                             }
                             steps{
                                 sh(label: 'Creating a .dmg installer', script: 'scripts/create_mac_distrib.sh')
@@ -265,6 +288,12 @@ pipeline {
                                       + "--mount type=volume,source=msvc-runtime,target=${env.VC_RUNTIME_INSTALLER_LOCATION}"
                                }
                             }
+                            environment{
+                                UV_CONFIG_FILE=createUVConfig()
+                            }
+                            options{
+                                timeout(time: 10, unit: 'MINUTES')
+                            }
                             steps{
                                 bat 'powershell scripts/create-windows-distribution.ps1'
                                 archiveArtifacts artifacts: 'dist/*.msi', fingerprint: true
@@ -275,6 +304,7 @@ pipeline {
                                     cleanWs(
                                         deleteDirs: true,
                                         patterns: [
+                                            [pattern: 'uv.toml', type: 'INCLUDE'],
                                             [pattern: 'build/', type: 'INCLUDE'],
                                             [pattern: 'dist/', type: 'INCLUDE'],
                                             [pattern: 'venv/', type: 'INCLUDE'],
