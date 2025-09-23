@@ -3,6 +3,9 @@ name = "gce"
 version = "0.0.1"
 description = "Galatea config editor"
 requires-python = ">= 3.12"
+maintainers = [
+    { name="Henry Borchers", email="hborcher@illinois.edu" }
+]
 authors = [
     {name="University Library at The University of Illinois at Urbana Champaign: Preservation Services", email="prescons@library.illinois.edu"}
 ]
@@ -18,8 +21,37 @@ classifiers = [
     "Topic :: System :: Archiving"
 
 ]
+dependencies = [
+    "pyside6-essentials>=6.9.2",
+]
 
 [tool.setuptools]
 packages = ["gce"]
 zip-safe = true
 package-dir = {"" = "src"}
+
+[project.gui-scripts]
+gce = "gce.__main__:main"
+
+[build-system]
+requires = ["setuptools>=80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "lxml>=6.0.1",
+    "mypy>=1.18.1",
+    "ruff>=0.13.1",
+]
+ci = [{include-group = "dev"}]
+freeze = [
+    "cmake>=4.1.0",
+    "jinja2>=3.1.6",
+    "pyinstaller>=6.16.0",
+]
+
+[tool.mypy]
+mypy_path = "src"
+
+[tool.ruff]
+line-length = 79
