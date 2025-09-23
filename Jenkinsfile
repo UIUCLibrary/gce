@@ -39,6 +39,7 @@ def getMsiInstallerPath(path){
 pipeline {
     agent none
     parameters {
+        booleanParam(name: 'RUN_CHECKS', defaultValue: true, description: 'Run checks on code')
         booleanParam(name: 'PACKAGE_MAC_OS_STANDALONE_DMG_X86_64', defaultValue: false, description: 'Create a Apple Application Bundle DMG for Intel based Macs')
         booleanParam(name: 'PACKAGE_MAC_OS_STANDALONE_DMG_ARM64', defaultValue: false, description: 'Create a Apple Application Bundle DMG for Apple Silicon')
         booleanParam(name: 'PACKAGE_WINDOWS_INSTALLER', defaultValue: false, description: 'Create a standalone wix based .msi installer')
@@ -61,6 +62,10 @@ pipeline {
                             args '--mount source=gce_cache,target=/tmp'
                         }
 
+                    }
+                    when{
+                        equals expected: true, actual: params.RUN_CHECKS
+                        beforeAgent true
                     }
                     stages{
                         stage('Setup CI Environment'){
