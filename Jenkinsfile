@@ -1,3 +1,30 @@
+def getVersion(){
+    node(){
+        checkout scm
+        return readTOML( file: 'pyproject.toml')['project']['version']
+    }
+}
+def getNexusServer(){
+    retry(conditions: [agent()], count: 3) {
+        node(){
+            configFileProvider([configFile(fileId: 'deploymentStorageConfig', variable: 'CONFIG_FILE')]) {
+                def config = readJSON( file: CONFIG_FILE)
+                return config['server']['urls']
+            }
+        }
+    }
+}
+def getStandAloneRepos(){
+    retry(conditions: [agent()], count: 3) {
+        node(){
+            configFileProvider([configFile(fileId: 'deploymentStorageConfig', variable: 'CONFIG_FILE')]) {
+                def config = readJSON( file: CONFIG_FILE)
+                return config['publicReleases']['repos']
+            }
+        }
+    }
+}
+
 def getMsiInstallerPath(path){
     def msiFiles = findFiles(glob: "${path}/*.msi")
     if(msiFiles.size()==0){
@@ -15,6 +42,7 @@ pipeline {
         booleanParam(name: 'PACKAGE_MAC_OS_STANDALONE_DMG_X86_64', defaultValue: false, description: 'Create a Apple Application Bundle DMG for Intel based Macs')
         booleanParam(name: 'PACKAGE_MAC_OS_STANDALONE_DMG_ARM64', defaultValue: false, description: 'Create a Apple Application Bundle DMG for Apple Silicon')
         booleanParam(name: 'PACKAGE_WINDOWS_INSTALLER', defaultValue: false, description: 'Create a standalone wix based .msi installer')
+        booleanParam(name: 'DEPLOY_STANDALONE_PACKAGERS', defaultValue: false, description: 'Deploy standalone packages')
     }
     stages{
         stage('Building and Testing'){
@@ -141,13 +169,21 @@ pipeline {
                             agent{
                                 label 'mac && python3 && x86_64'
                             }
+                            options {
+                                skipDefaultCheckout true
+                            }
                             steps{
                                 unstash 'APPLE_APPLICATION_X86_64'
                                 sh "hdiutil verify \"${findFiles(glob: 'dist/*.dmg')[0].path}\""
                             }
                             post{
                                 cleanup{
-                                    sh "${tool(name: 'Default', type: 'git')} clean -dfx"
+                                    cleanWs(
+                                        deleteDirs: true,
+                                        patterns: [
+                                            [pattern: 'dist/', type: 'INCLUDE'],
+                                        ]
+                                    )
                                 }
                             }
                         }
@@ -180,13 +216,21 @@ pipeline {
                             agent{
                                 label 'mac && python3 && arm64'
                             }
+                            options {
+                                skipDefaultCheckout true
+                            }
                             steps{
                                 unstash 'APPLE_APPLICATION_ARM64'
                                 sh "hdiutil verify \"${findFiles(glob: 'dist/*.dmg')[0].path}\""
                             }
                             post{
                                 cleanup{
-                                    sh "${tool(name: 'Default', type: 'git')} clean -dfx"
+                                    cleanWs(
+                                        deleteDirs: true,
+                                        patterns: [
+                                            [pattern: 'dist/', type: 'INCLUDE'],
+                                        ]
+                                    )
                                 }
                             }
                         }
@@ -252,6 +296,7 @@ pipeline {
                                     }
                                 }
                                 stage('Install msi file'){
+                                    when{ equals expected: true, actual: false }
                                     environment {
                                         MSI_INSTALLER = getMsiInstallerPath('dist')
                                     }
@@ -276,6 +321,7 @@ pipeline {
                                     }
                                 }
                                 stage('Uninstall'){
+                                    when{ equals expected: true, actual: false }
                                     environment {
                                         APP_NAME='Galatea Config Editor'
                                     }
@@ -300,6 +346,73 @@ pipeline {
                                             [pattern: 'dist/', type: 'INCLUDE'],
                                         ]
                                     )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        stage('Deploy'){
+            parallel{
+                stage('Deploy Standalone'){
+                    agent {
+                        label 'linux'
+                    }
+                    when {
+                        allOf{
+                            equals expected: true, actual: params.DEPLOY_STANDALONE_PACKAGERS
+                            anyOf{
+                                equals expected: true, actual: params.PACKAGE_MAC_OS_STANDALONE_DMG_X86_64
+                                equals expected: true, actual: params.PACKAGE_MAC_OS_STANDALONE_DMG_ARM64
+                                equals expected: true, actual: params.PACKAGE_WINDOWS_INSTALLER
+                            }
+                        }
+                        beforeAgent true
+                        beforeInput true
+                        beforeOptions true
+                    }
+                    options{
+                        skipDefaultCheckout true
+                    }
+                    input {
+                        message 'Upload to Nexus server?'
+                        parameters {
+                            credentials credentialType: 'com.cloudbees.plugins.credentials.common.StandardCredentials', defaultValue: 'jenkins-nexus', name: 'NEXUS_CREDS', required: true
+                            choice(
+                                choices: getNexusServer(),
+                                description: 'server url.',
+                                name: 'NEXUS_SERVER_URL'
+                            )
+                            choice(
+                                choices: getStandAloneRepos(),
+                                description: 'Repository to use.',
+                                name: 'REPO'
+                            )
+                            string defaultValue: "gce/${getVersion()}", description: 'subdirectory to store artifact', name: 'archiveFolder'
+                        }
+                    }
+                    steps{
+                        script{
+                            if(params.PACKAGE_MAC_OS_STANDALONE_DMG_X86_64){
+                                unstash 'APPLE_APPLICATION_X86_64'
+                            }
+                            if(params.PACKAGE_MAC_OS_STANDALONE_DMG_ARM64){
+                                unstash 'APPLE_APPLICATION_ARM64'
+                            }
+                            if(params.PACKAGE_WINDOWS_INSTALLER){
+                                unstash 'STANDALONE_WINDOWS_X86_64_INSTALLER'
+                            }
+                            def parts = [
+                                '-F \'raw.directory=gce\'',
+                            ]
+                            findFiles(glob: 'dist/**/*.*').eachWithIndex{ file, index ->
+                                parts += "-F 'raw.asset${index+1}=@${file.path}'"
+                                parts += "-F 'raw.asset${index+1}.filename=${file.name}'"
+                            }
+                            withEnv(["NEXUS_URL=${NEXUS_SERVER_URL}/service/rest/v1/components?repository=${REPO}"]){
+                                withCredentials([usernamePassword(credentialsId: NEXUS_CREDS, passwordVariable: 'NEXUS_PASS', usernameVariable: 'NEXUS_USER')])  {
+                                   sh "curl -v -u \$NEXUS_USER:\$NEXUS_PASS -X POST ${parts.join(' ')} \$NEXUS_URL"
                                 }
                             }
                         }
