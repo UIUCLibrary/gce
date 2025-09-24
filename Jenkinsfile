@@ -188,7 +188,7 @@ pipeline {
                 anyOf{
                     equals expected: true, actual: params.PACKAGE_MAC_OS_STANDALONE_DMG_X86_64
                     equals expected: true, actual: params.PACKAGE_MAC_OS_STANDALONE_DMG_ARM64
-                    equals expected: true, actual: params.PACKAGE_STANDALONE_WINDOWS_INSTALLER
+                    equals expected: true, actual: params.PACKAGE_WINDOWS_INSTALLER
                 }
             }
             parallel{
