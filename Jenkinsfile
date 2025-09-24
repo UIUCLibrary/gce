@@ -357,7 +357,6 @@ pipeline {
                                     }
                                 }
                                 stage('Install msi file'){
-                                    when{ equals expected: true, actual: false }
                                     environment {
                                         MSI_INSTALLER = getMsiInstallerPath('dist')
                                     }
@@ -382,7 +381,6 @@ pipeline {
                                     }
                                 }
                                 stage('Uninstall'){
-                                    when{ equals expected: true, actual: false }
                                     environment {
                                         APP_NAME='Galatea Config Editor'
                                     }
