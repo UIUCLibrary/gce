@@ -72,12 +72,11 @@ pipeline {
                         UV_CONFIG_FILE=createUVConfig()
                     }
                     agent {
-                        docker{
-                            image 'python'
-                            label 'docker && linux && x86_64'
+                        dockerfile {
+                            filename 'ci/docker/linux/jenkins/Dockerfile'
+                            label 'linux && docker'
                             args '--mount source=gce_cache,target=/tmp'
                         }
-
                     }
                     when{
                         equals expected: true, actual: params.RUN_CHECKS
