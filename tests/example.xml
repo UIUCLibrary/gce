@@ -1,0 +1,22 @@
+<record xmlns="http://www.loc.gov/MARC21/slim" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.loc.gov/MARC21/slim http://www.loc.gov/standards/marcxml/schema/MARC21slim.xsd">
+    <leader>01700cam a2200421 a 4500</leader>
+    <controlfield tag="001">9910012205899</controlfield>
+    <controlfield tag="005">20221118052825.0</controlfield>
+    <controlfield tag="008">780930s1973 mx 000 0 spa d</controlfield>
+    <datafield ind1=" " ind2=" " tag="035">
+        <subfield code="a">(OCoLC)04262822</subfield>
+    </datafield>
+    <datafield ind1=" " ind2=" " tag="035">
+        <subfield code="a">(OCoLC)ocm04262822</subfield>
+    </datafield>
+    <datafield ind1=" " ind2=" " tag="035">
+        <subfield code="a">(EXLNZ-01CARLI_NETWORK)991062232649705816</subfield>
+    </datafield>
+    <datafield ind1=" " ind2=" " tag="040">
+        <subfield code="a">PUL</subfield>
+        <subfield code="b">eng</subfield>
+        <subfield code="c">PUL</subfield>
+        <subfield code="d">TJC</subfield>
+    </datafield>
+</record>

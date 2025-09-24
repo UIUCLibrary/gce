@@ -72,12 +72,11 @@ pipeline {
                         UV_CONFIG_FILE=createUVConfig()
                     }
                     agent {
-                        docker{
-                            image 'python'
-                            label 'docker && linux && x86_64'
+                        dockerfile {
+                            filename 'ci/docker/linux/jenkins/Dockerfile'
+                            label 'linux && docker'
                             args '--mount source=gce_cache,target=/tmp'
                         }
-
                     }
                     when{
                         equals expected: true, actual: params.RUN_CHECKS
@@ -100,9 +99,16 @@ pipeline {
                         }
                         stage('Run Tests'){
                             parallel{
+                                stage('uv-secure'){
+                                    steps{
+                                        catchError(buildResult: 'SUCCESS', message: 'uv-secure found issues', stageResult: 'UNSTABLE') {
+                                            sh(label: 'Audit Requirement Freeze File', script: './venv/bin/uvx uv-secure --cache-path=/tmp/cache/uv-secure uv.lock')
+                                        }
+                                    }
+                                }
                                 stage('Task Scanner'){
                                     steps{
-                                        recordIssues(tools: [taskScanner(highTags: 'FIXME', includePattern: 'tripwire/**/*.py', normalTags: 'TODO')])
+                                        recordIssues(tools: [taskScanner(highTags: 'FIXME', includePattern: 'src/**/*.py', normalTags: 'TODO')])
                                     }
                                 }
                                 stage('Ruff') {
@@ -119,6 +125,23 @@ pipeline {
                                     post{
                                         always{
                                             recordIssues(tools: [pyLint(pattern: 'reports/ruffoutput.txt', name: 'Ruff')])
+                                        }
+                                    }
+                                }
+                                stage('PyTest'){
+                                    environment{
+                                        PYTHONFAULTHANDLER='1'
+                                        QT_QPA_PLATFORM='offscreen'
+                                    }
+                                    steps{
+                                        catchError(buildResult: 'UNSTABLE', message: 'Did not pass all pytest tests', stageResult: 'UNSTABLE') {
+                                            sh(script: './venv/bin/uv run coverage run --parallel-mode --source=src -m pytest --junitxml=./reports/tests/pytest/pytest-junit.xml --capture=no')
+                                        }
+                                    }
+                                    post {
+                                        always {
+                                            junit(allowEmptyResults: true, testResults: 'reports/tests/pytest/pytest-junit.xml')
+                                            stash(allowEmpty: true, includes: 'reports/tests/pytest/*.xml', name: 'PYTEST_UNIT_TEST_RESULTS')
                                         }
                                     }
                                 }
@@ -143,6 +166,16 @@ pipeline {
                         }
                     }
                     post {
+                        always{
+                            sh(label:'combining coverage data and creating reports',
+                               script: '''./venv/bin/uv run coverage combine
+                                          ./venv/bin/uv run coverage xml -o reports/coverage.xml
+                                          ./venv/bin/uv run coverage html -d reports/coverage
+                                       '''
+                            )
+                            stash includes: 'reports/coverage.xml', name: 'COVERAGE_REPORT_DATA'
+                            recordCoverage(tools: [[parser: 'COBERTURA', pattern: 'reports/coverage.xml']])
+                        }
                         cleanup{
                             cleanWs(
                                 deleteDirs: true,
@@ -162,7 +195,7 @@ pipeline {
                 anyOf{
                     equals expected: true, actual: params.PACKAGE_MAC_OS_STANDALONE_DMG_X86_64
                     equals expected: true, actual: params.PACKAGE_MAC_OS_STANDALONE_DMG_ARM64
-                    equals expected: true, actual: params.PACKAGE_STANDALONE_WINDOWS_INSTALLER
+                    equals expected: true, actual: params.PACKAGE_WINDOWS_INSTALLER
                 }
             }
             parallel{
@@ -298,6 +331,7 @@ pipeline {
                                 bat 'powershell scripts/create-windows-distribution.ps1'
                                 archiveArtifacts artifacts: 'dist/*.msi', fingerprint: true
                                 stash includes: 'dist/*.msi', name: 'STANDALONE_WINDOWS_X86_64_INSTALLER'
+                                stash includes: 'ci/jenkins/scripts/**', name: 'JENKINS_SCRIPTS'
                             }
                             post{
                                 cleanup{
@@ -331,7 +365,6 @@ pipeline {
                                     }
                                 }
                                 stage('Install msi file'){
-                                    when{ equals expected: true, actual: false }
                                     environment {
                                         MSI_INSTALLER = getMsiInstallerPath('dist')
                                     }
@@ -347,6 +380,7 @@ pipeline {
                                             label: 'Show installed applications',
                                             script: 'Get-WmiObject -Class Win32_Product'
                                         )
+                                        unstash 'JENKINS_SCRIPTS'
                                         bat('powershell ci/jenkins/scripts/ensure_application_installed_property.ps1')
                                     }
                                     post{
@@ -356,7 +390,6 @@ pipeline {
                                     }
                                 }
                                 stage('Uninstall'){
-                                    when{ equals expected: true, actual: false }
                                     environment {
                                         APP_NAME='Galatea Config Editor'
                                     }
@@ -369,6 +402,7 @@ pipeline {
                                                        Get-WmiObject -Class Win32_Product
                                                     '''
                                        )
+                                       unstash 'JENKINS_SCRIPTS'
                                        bat('powershell ci/jenkins/scripts/ensure_application_uninstalled.ps1')
                                     }
                                 }
@@ -378,6 +412,7 @@ pipeline {
                                     cleanWs(
                                         deleteDirs: true,
                                         patterns: [
+                                            [pattern: 'ci/', type: 'INCLUDE'],
                                             [pattern: 'dist/', type: 'INCLUDE'],
                                         ]
                                     )
