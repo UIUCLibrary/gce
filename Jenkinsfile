@@ -101,7 +101,7 @@ pipeline {
                             parallel{
                                 stage('Task Scanner'){
                                     steps{
-                                        recordIssues(tools: [taskScanner(highTags: 'FIXME', includePattern: 'tripwire/**/*.py', normalTags: 'TODO')])
+                                        recordIssues(tools: [taskScanner(highTags: 'FIXME', includePattern: 'src/**/*.py', normalTags: 'TODO')])
                                     }
                                 }
                                 stage('Ruff') {
