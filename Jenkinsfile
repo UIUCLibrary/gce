@@ -324,6 +324,7 @@ pipeline {
                                 bat 'powershell scripts/create-windows-distribution.ps1'
                                 archiveArtifacts artifacts: 'dist/*.msi', fingerprint: true
                                 stash includes: 'dist/*.msi', name: 'STANDALONE_WINDOWS_X86_64_INSTALLER'
+                                stash includes: 'ci/jenkins/scripts/**', name: 'JENKINS_SCRIPTS'
                             }
                             post{
                                 cleanup{
@@ -372,6 +373,7 @@ pipeline {
                                             label: 'Show installed applications',
                                             script: 'Get-WmiObject -Class Win32_Product'
                                         )
+                                        unstash 'JENKINS_SCRIPTS'
                                         bat('powershell ci/jenkins/scripts/ensure_application_installed_property.ps1')
                                     }
                                     post{
@@ -393,6 +395,7 @@ pipeline {
                                                        Get-WmiObject -Class Win32_Product
                                                     '''
                                        )
+                                       unstash 'JENKINS_SCRIPTS'
                                        bat('powershell ci/jenkins/scripts/ensure_application_uninstalled.ps1')
                                     }
                                 }
@@ -402,6 +405,7 @@ pipeline {
                                     cleanWs(
                                         deleteDirs: true,
                                         patterns: [
+                                            [pattern: 'ci/', type: 'INCLUDE'],
                                             [pattern: 'dist/', type: 'INCLUDE'],
                                         ]
                                     )
