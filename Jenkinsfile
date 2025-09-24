@@ -121,6 +121,23 @@ pipeline {
                                         }
                                     }
                                 }
+                                stage('PyTest'){
+                                    environment{
+                                        PYTHONFAULTHANDLER='1'
+                                        QT_QPA_PLATFORM='offscreen'
+                                    }
+                                    steps{
+                                        catchError(buildResult: 'UNSTABLE', message: 'Did not pass all pytest tests', stageResult: 'UNSTABLE') {
+                                            sh(script: './venv/bin/uv run coverage run --parallel-mode --source=src -m pytest --junitxml=./reports/tests/pytest/pytest-junit.xml --capture=no')
+                                        }
+                                    }
+                                    post {
+                                        always {
+                                            junit(allowEmptyResults: true, testResults: 'reports/tests/pytest/pytest-junit.xml')
+                                            stash(allowEmpty: true, includes: 'reports/tests/pytest/*.xml', name: 'PYTEST_UNIT_TEST_RESULTS')
+                                        }
+                                    }
+                                }
                                 stage('MyPy'){
                                     steps{
                                         catchError(buildResult: 'SUCCESS', message: 'MyPy found issues', stageResult: 'UNSTABLE') {
@@ -142,6 +159,16 @@ pipeline {
                         }
                     }
                     post {
+                        always{
+                            sh(label:'combining coverage data and creating reports',
+                               script: '''./venv/bin/uv run coverage combine
+                                          ./venv/bin/uv run coverage xml -o reports/coverage.xml
+                                          ./venv/bin/uv run coverage html -d reports/coverage
+                                       '''
+                            )
+                            stash includes: 'reports/coverage.xml', name: 'COVERAGE_REPORT_DATA'
+                            recordCoverage(tools: [[parser: 'COBERTURA', pattern: 'reports/coverage.xml']])
+                        }
                         cleanup{
                             cleanWs(
                                 deleteDirs: true,
