@@ -99,6 +99,13 @@ pipeline {
                         }
                         stage('Run Tests'){
                             parallel{
+                                stage('uv-secure'){
+                                    steps{
+                                        catchError(buildResult: 'SUCCESS', message: 'uv-secure found issues', stageResult: 'UNSTABLE') {
+                                            sh(label: 'Audit Requirement Freeze File', script: './venv/bin/uvx uv-secure --cache-path=/tmp/cache/uv-secure uv.lock')
+                                        }
+                                    }
+                                }
                                 stage('Task Scanner'){
                                     steps{
                                         recordIssues(tools: [taskScanner(highTags: 'FIXME', includePattern: 'src/**/*.py', normalTags: 'TODO')])
