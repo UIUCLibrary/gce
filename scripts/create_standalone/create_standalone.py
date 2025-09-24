@@ -211,6 +211,10 @@ def package_with_cpack(
             cpack_file_generator.metadata["CPACK_WIX_VERSION"] = (
                 package_metadata["CPACK_WIX_VERSION"]
             )
+        if "CPACK_PACKAGE_INSTALL_DIRECTORY" in package_metadata:
+            cpack_file_generator.metadata["CPACK_PACKAGE_INSTALL_DIRECTORY"] = (
+                package_metadata["CPACK_PACKAGE_INSTALL_DIRECTORY"]
+            )
         if "CPACK_WIX_SIZEOF_VOID_P" in package_metadata:
             cpack_file_generator.metadata["CPACK_WIX_SIZEOF_VOID_P"] = (
                 package_metadata["CPACK_WIX_SIZEOF_VOID_P"]
@@ -332,7 +336,8 @@ class WindowsWixInstallerCreator(AbsPackagingStrategy):
                 "CPACK_RESOURCE_FILE_LICENSE": str(saved_license_path),
                 "CPACK_WIX_SIZEOF_VOID_P": 8,
                 "CPACK_WIX_VERSION": 4,
-                "description": "this is a script",
+                "CPACK_PACKAGE_INSTALL_DIRECTORY": "Galatea Config Editor",
+                "description": "Galatea Config Editor",
                 "output_path": os.path.join(self.build_path, "cpack"),
                 "architecture": platform.machine(),
                 "os_name": platform.system(),
