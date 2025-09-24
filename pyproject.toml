@@ -24,6 +24,7 @@ classifiers = [
 dependencies = [
     "pygments>=2.19.2",
     "pyside6-essentials>=6.9.2",
+     "galatea>=0.4.1"
 ]
 
 [tool.setuptools]
@@ -63,3 +64,15 @@ mypy_path = "src"
 
 [tool.ruff]
 line-length = 79
+
+[tool.uv.sources]
+galatea = {index = "uiuc_prescon_python"}
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true
+
+[[tool.uv.index]]
+name = "uiuc_prescon_python"
+url = "https://nexus.library.illinois.edu/repository/uiuc_prescon_python/simple"
+explicit = true

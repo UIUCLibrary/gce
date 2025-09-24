@@ -1,10 +1,13 @@
+import os
 from unittest.mock import Mock
 
 import pygments.lexer
 import pygments.style
+import pytest
 from PySide6 import QtWidgets, QtCore, QtTest
 
 from gce import gui
+
 
 class TestJinjaEditorDialog:
     def test_rejected_on_close(self, qtbot):
@@ -12,6 +15,7 @@ class TestJinjaEditorDialog:
         qtbot.addWidget(dialog)
         with qtbot.waitSignal(dialog.rejected):
             dialog.button_box.button(QtWidgets.QDialogButtonBox.Close).click()
+
 
 class TestJinjaEditor:
     def test_xml_text_changed_signal_emitted(self, qtbot):
@@ -46,6 +50,15 @@ class TestJinjaEditor:
         test_style = "monokai"
         editor.jinja_pygments_style = test_style
         assert editor.jinja_pygments_style == test_style
+
+    def test_update_output(self, qtbot):
+        editor = gui.JinjaEditor()
+        qtbot.addWidget(editor)
+        editor.update_output = Mock()
+        editor.xml_text = "<root><element>Value</element></root>"
+        editor.jina_text = "{{ fields['001'] }}"
+        editor.update_output.assert_called()
+
 
 class TestLineEditSyntaxHighlighting:
     def test_size_hint(self, qtbot):
@@ -93,6 +106,7 @@ class TestLineEditSyntaxHighlighting:
             line_edit.pygments_style = "monokai"
         assert spy.count() == 1
 
+
 class TestPygmentsHighlighter:
     def test_setting_lexer_emits_signal(self, qtbot):
         parent = QtCore.QObject()
@@ -107,5 +121,57 @@ class TestPygmentsHighlighter:
         highlighter = gui.PygmentsHighlighter(parent)
         spy = QtTest.QSignalSpy(highlighter.style_changed)
         with qtbot.waitSignal(highlighter.style_changed):
-            highlighter.style = Mock(spec=pygments.style.Style, list_styles=lambda: [])
+            highlighter.style = Mock(
+                spec=pygments.style.Style, list_styles=lambda: []
+            )
         assert spy.count() == 1
+
+
+class TestJinjaRenderer:
+    @pytest.fixture
+    def sample_xml(self):
+        with open(os.path.join(os.path.dirname(__file__), "example.xml")) as f:
+            return f.read()
+
+    @pytest.mark.parametrize(
+        "jinja_text, expected_text, is_valid",
+        [
+            ("{{ fields['040'][0].a }}", "PUL", True),
+            ("{{ fields['040'][0].b }}", "eng", True),
+            (
+                "{{ fields['040'][0].b }",
+                "Jinja expression Template Syntax Error : unexpected '}'",
+                False,
+            ),
+            (
+                "{{ record['040'][0].b }}",
+                "jinja2 exception Undefined Error : 'record' is undefined",
+                False,
+            ),
+        ],
+    )
+    def test_render_with_valid_input(
+        self, sample_xml, jinja_text, expected_text, is_valid
+    ):
+        renderer = gui.JinjaRenderer()
+        renderer.jinja_text = jinja_text
+        renderer.xml = sample_xml
+        output = renderer.render()
+        assert output == expected_text
+        assert renderer.is_valid is is_valid
+
+    def test_invalid_xml_error(self):
+        renderer = gui.JinjaRenderer()
+        renderer.jinja_text = "{{ fields['040'][0].a }}"
+        renderer.xml = "This is not an XML"
+        output = renderer.render()
+        assert "Unable to parse xml data" in output
+        assert renderer.is_valid is False
+
+    def test_empty_xml_is_not_an_error(self):
+        renderer = gui.JinjaRenderer()
+        renderer.jinja_text = "{{ fields['040'][0].a }}"
+        renderer.xml = ""
+        output = renderer.render()
+        assert "" == output
+        assert renderer.is_valid is True

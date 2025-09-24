@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
+import logging
 import typing
 from typing import Type, Optional
+
+import jinja2
 from PySide6 import QtWidgets, QtCore, QtGui
 import pygments.styles
 import pygments.lexers
+from galatea.merge_data import serialize_with_jinja_template, MappingConfig
 
 if typing.TYPE_CHECKING:
     from pygments.style import Style as PygmentsStyle
 
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +109,57 @@ class _JinjaEditor(QtWidgets.QWidget):
         self._widget_layout.addWidget(self.output, 4, 0, 1, 2)
 
 
+class JinjaRenderer:
+    def __init__(self):
+        super().__init__()
+        self.jinja_text = ""
+        self.xml = ""
+        self.output = ""
+        self.is_valid = True
+        self.error_message = None
+
+    def render(self):
+        config = MappingConfig(
+            key="",
+            matching_keys=[],
+            delimiter="||",
+            existing_data="keep",
+            serialize_method="jinja2",
+            experimental={"jinja2": {"template": self.jinja_text}},
+        )
+        try:
+            self.error_message = None
+            res = serialize_with_jinja_template(
+                ET.fromstring(self.xml),
+                config,
+                enable_experimental_features=True,
+            )
+            self.is_valid = True
+            self.output = res
+            return res
+        except jinja2.exceptions.UndefinedError as e:
+            self.error_message = f"jinja2 exception Undefined Error : {e}"
+            self.output = ""
+            self.is_valid = False
+            return self.error_message
+
+        except jinja2.exceptions.TemplateSyntaxError as e:
+            self.error_message = (
+                f"Jinja expression Template Syntax Error : {e}"
+            )
+            self.output = ""
+            self.is_valid = False
+            return self.error_message
+        except ET.ParseError as e:
+            if self.xml == "":
+                self.is_valid = True
+                return self.output
+            self.error_message = f"Unable to parse xml data: {e}"
+            self.output = ""
+            self.is_valid = False
+            return self.error_message
+
+
 class JinjaEditor(QtWidgets.QWidget):
     xml_data_changed = QtCore.Signal()
     jinja_expression_changed = QtCore.Signal()
@@ -120,6 +175,27 @@ class JinjaEditor(QtWidgets.QWidget):
         )
         self._widget_layout = QtWidgets.QVBoxLayout(self)
         self._widget_layout.addWidget(self._widgets)
+        self.xml_data_changed.connect(self.update_output)
+        self.jinja_expression_changed.connect(self.update_output)
+
+    def update_output(self):
+        renderer = JinjaRenderer()
+        renderer.jinja_text = self._widgets.jinja_expression.text
+        renderer.xml = self._widgets.xml_text_edit_widget.toPlainText()
+        self._widgets.output.setText(renderer.render())
+
+        palette = self.palette()
+        if renderer.is_valid:
+            default_text_color = palette.text()
+            self._widgets.output.setStyleSheet(
+                f"color: {default_text_color.color().value()};"
+            )
+        else:
+            alert_text = palette.highlightedText()
+            error_style_sheet = (
+                f"color: {alert_text.color().value()}; font-style: italic"
+            )
+            self._widgets.output.setStyleSheet(error_style_sheet)
 
     @property
     def jinja_pygments_style(self) -> str:
@@ -144,6 +220,10 @@ class JinjaEditor(QtWidgets.QWidget):
     @xml_text.setter
     def xml_text(self, value: str) -> None:
         self._widgets.xml_text_edit_widget.setPlainText(value)
+
+    @property
+    def output_text(self) -> str:
+        return self._widgets.output.text()
 
 
 class LineEditSyntaxHighlighting(QtWidgets.QPlainTextEdit):
