@@ -1,6 +1,6 @@
 [project]
 name = "gce"
-version = "0.0.2.dev0"
+version = "0.0.2"
 description = "Galatea config editor"
 requires-python = ">= 3.12"
 maintainers = [
