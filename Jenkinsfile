@@ -334,6 +334,9 @@ pipeline {
                                 stash includes: 'ci/jenkins/scripts/**', name: 'JENKINS_SCRIPTS'
                             }
                             post{
+                                failure{
+                                    archiveArtifacts artifacts: 'build/**/CPackConfig.cmake,build/**/wix.log'
+                                }
                                 cleanup{
                                     cleanWs(
                                         deleteDirs: true,

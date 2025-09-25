@@ -143,13 +143,26 @@ class GenerateCPackConfig(abc.ABC):
     def set_boilderplate(self) -> None:
         """Set boilerplate metadata."""
         self.metadata["CPACK_PACKAGE_NAME"] = self.package_name
-        self.metadata["CPACK_PACKAGE_FILE_NAME"] = self.source_package_path
+        # self.metadata["CPACK_PACKAGE_FILE_NAME"] = self.source_package_path
         version = self.metadata.get("CPACK_PACKAGE_VERSION")
         if version:
             version_parser = packaging.version.Version(version)
             self.metadata['CPACK_PACKAGE_VERSION_MAJOR'] = version_parser.major
             self.metadata['CPACK_PACKAGE_VERSION_MINOR'] = version_parser.minor
             self.metadata['CPACK_PACKAGE_VERSION_PATCH'] = version_parser.micro
+            if version_parser.is_devrelease:
+                self.metadata['CPACK_PACKAGE_VERSION'] = \
+                    f"{version_parser.major}.{version_parser.minor}.{version_parser.micro}-development.{version_parser.dev}"
+            elif version_parser.is_prerelease:
+                pre_type, pre_version = version_parser.pre
+                label = {
+                    "a": "alpha",
+                    "b": "beta",
+                    "rc": "releasecandidate"
+                }.get(pre_type)
+                if label:
+                    self.metadata['CPACK_PACKAGE_VERSION'] = \
+                        f"{version_parser.major}.{version_parser.minor}.{version_parser.micro}-{label}.{pre_version}"
         else:
             warnings.warn("Version not set in metadata")
 
@@ -171,12 +184,10 @@ class GenerateCPackConfig(abc.ABC):
             self.metadata["CPACK_PACKAGE_DIRECTORY"] = sanitize_path(package_dir)
         if license_path := self.metadata.get("CPACK_RESOURCE_FILE_LICENSE"):
             self.metadata["CPACK_RESOURCE_FILE_LICENSE"] = sanitize_path(license_path)
-    def build(self) -> str:
+    def build(self) -> Dict[str, str]:
         """Build the contents of a config file to use with cpack."""
-        with open(os.path.join(os.path.dirname(__file__), 'CPackConfig.cmake.jinja2'), "r") as f:
-            template = Template(f.read())
-            self.set_boilderplate()
-            return template.render(**self.metadata)
+        self.set_boilderplate()
+        return self.metadata
 
 def package_with_cpack(
     package_name: str,
@@ -196,30 +207,18 @@ def package_with_cpack(
             package_root,
             version_number=package_metadata["version"],
         )
-        if "output_path" in package_metadata:
-            cpack_file_generator.metadata["CPACK_PACKAGE_DIRECTORY"] = (
-                package_metadata["output_path"]
-            )
-        cpack_file_generator.metadata["CPACK_PACKAGE_DESCRIPTION"] = (
-            package_metadata.get("description", "")
-        )
-        if "CPACK_RESOURCE_FILE_LICENSE" in package_metadata:
-            cpack_file_generator.metadata["CPACK_RESOURCE_FILE_LICENSE"] = (
-                package_metadata["CPACK_RESOURCE_FILE_LICENSE"]
-            )
-        if "CPACK_WIX_VERSION" in package_metadata:
-            cpack_file_generator.metadata["CPACK_WIX_VERSION"] = (
-                package_metadata["CPACK_WIX_VERSION"]
-            )
-        if "CPACK_PACKAGE_INSTALL_DIRECTORY" in package_metadata:
-            cpack_file_generator.metadata["CPACK_PACKAGE_INSTALL_DIRECTORY"] = (
-                package_metadata["CPACK_PACKAGE_INSTALL_DIRECTORY"]
-            )
-        if "CPACK_WIX_SIZEOF_VOID_P" in package_metadata:
-            cpack_file_generator.metadata["CPACK_WIX_SIZEOF_VOID_P"] = (
-                package_metadata["CPACK_WIX_SIZEOF_VOID_P"]
-            )
-        f.write(cpack_file_generator.build())
+        template_metadata = {**cpack_file_generator.build(), **package_metadata}
+
+        if package_dir := template_metadata.get('CPACK_PACKAGE_DIRECTORY'):
+            template_metadata["CPACK_PACKAGE_DIRECTORY"] = os.path.abspath(package_dir).replace("\\", "\\\\")
+
+        if license_path := template_metadata.get("CPACK_RESOURCE_FILE_LICENSE"):
+            template_metadata["CPACK_RESOURCE_FILE_LICENSE"] = os.path.abspath(license_path).replace("\\", "\\\\")
+
+        with open(os.path.join(os.path.dirname(__file__), 'CPackConfig.cmake.jinja2'), "r") as templated_f:
+            template = Template(templated_f.read())
+            f.write(template.render(**template_metadata))
+        # f.write(cpack_file_generator.build())
     cpack_cmd = shutil.which("cpack", path=cmake.CMAKE_BIN_DIR)
     if not cpack_cmd:
         raise RuntimeError("unable to locate cpack command")
@@ -228,10 +227,10 @@ def package_with_cpack(
     )
     for file in filter(
         lambda item: item.is_file(),
-        os.scandir(package_metadata["output_path"]),
+        os.scandir(template_metadata['CPACK_PACKAGE_DIRECTORY']),
     ):
         output_file = os.path.normpath(os.path.join(dist, file.name))
-        logger.info(f"Copying {file.name} to {output_file}")
+        logger.info(f"Copying {file.path} to {output_file}")
         shutil.copy(file.path, output_file)
 
 
@@ -337,10 +336,10 @@ class WindowsWixInstallerCreator(AbsPackagingStrategy):
                 "CPACK_WIX_SIZEOF_VOID_P": 8,
                 "CPACK_WIX_VERSION": 4,
                 "CPACK_PACKAGE_INSTALL_DIRECTORY": "Galatea Config Editor",
-                "description": "Galatea Config Editor",
-                "output_path": os.path.join(self.build_path, "cpack"),
-                "architecture": platform.machine(),
-                "os_name": platform.system(),
+                "CPACK_PACKAGE_DESCRIPTION": "Galatea Config Editor",
+                "CPACK_PACKAGE_DIRECTORY": os.path.join(self.build_path, "cpack"),
+                # "architecture": platform.machine(),
+                # "os_name": platform.system(),
             }
 
             with open(project_toml_file, "rb") as f:
@@ -351,7 +350,7 @@ class WindowsWixInstallerCreator(AbsPackagingStrategy):
                     metadata["version"] = version
 
                 if description := project.get("description"):
-                    metadata["description"] = description
+                    metadata["CPACK_PACKAGE_DESCRIPTION"] = description
                 return metadata
 
         package_distribution(
@@ -380,14 +379,9 @@ class MacOSBundleCreator(AbsPackagingStrategy):
 
         def metadata_strategy():
             project_toml_file = "pyproject.toml"
-            os_friendly_names = {"Darwin": "MacOS"}
             metadata = {
-                "description": "this is a script",
-                "output_path": os.path.join(self.build_path, "cpack"),
-                "architecture": platform.machine(),
-                "os_name": os_friendly_names[platform.system()]
-                if platform.system() in os_friendly_names
-                else platform.system(),
+                "CPACK_PACKAGE_DESCRIPTION": "this is a script",
+                "CPACK_PACKAGE_DIRECTORY": os.path.join(self.build_path, "cpack"),
             }
 
             with open(project_toml_file, "rb") as f:
@@ -396,9 +390,10 @@ class MacOSBundleCreator(AbsPackagingStrategy):
                 version = project.get("version")
                 if version:
                     metadata["version"] = version
+                    metadata["CPACK_PACKAGE_FILE_NAME"] = f"Galatea Config Editor-{version}-macos-${{CMAKE_HOST_SYSTEM_PROCESSOR}}"
 
                 if description := project.get("description"):
-                    metadata["description"] = description
+                    metadata["CPACK_PACKAGE_DESCRIPTION"] = description
                 return metadata
 
         package_distribution(
