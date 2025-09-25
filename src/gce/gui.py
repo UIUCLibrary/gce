@@ -71,10 +71,13 @@ class XMLViewer(QtWidgets.QTextEdit):
 
     @pygments_style.setter
     def pygments_style(self, value: str):
-        if self._highlighter.style is None or value != self._highlighter.style.name:
+        if (
+            self._highlighter.style is None
+            or value != self._highlighter.style.name
+        ):
             self._highlighter.style = pygments.styles.get_style_by_name(value)
-            self.setStyleSheet(f"background-color: {self._highlighter.style.background_color};") # Set background color
             self.style_colors_changed.emit()
+
 
 class _JinjaEditor(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
@@ -285,7 +288,6 @@ class LineEditSyntaxHighlighting(QtWidgets.QPlainTextEdit):
     def pygments_style(self, value: str) -> None:
         if value != self._style.name:
             self._style = pygments.styles.get_style_by_name(value)
-            self.setStyleSheet(f"background-color: {self._style.background_color};") # Set background color
             if self._highlighter is not None:
                 self._highlighter.style = self._style
                 self.style_colors_changed.emit()
@@ -366,7 +368,9 @@ class PygmentsHighlighter(QtGui.QSyntaxHighlighter):
             fmt.setFontItalic(True)
         if underlined:
             fmt.setUnderlineColor(color)
-            fmt.setUnderlineStyle(QtGui.QTextCharFormat.UnderlineStyle.SingleUnderline)
+            fmt.setUnderlineStyle(
+                QtGui.QTextCharFormat.UnderlineStyle.SingleUnderline
+            )
         fmt.setForeground(color)
         return fmt
 
