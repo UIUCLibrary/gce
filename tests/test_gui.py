@@ -48,8 +48,8 @@ class TestJinjaEditor:
         editor = gui.JinjaEditor()
         qtbot.addWidget(editor)
         test_style = "monokai"
-        editor.jinja_pygments_style = test_style
-        assert editor.jinja_pygments_style == test_style
+        editor.pygments_style = test_style
+        assert editor.pygments_style == test_style
 
     def test_update_output(self, qtbot):
         editor = gui.JinjaEditor()
