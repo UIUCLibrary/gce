@@ -64,6 +64,9 @@ class XMLViewer(QtWidgets.QTextEdit):
         self.setAcceptRichText(False)
         self._highlighter = PygmentsHighlighter(parent=self.document())
         self._highlighter.lexer = pygments.lexers.get_lexer_by_name("xml")
+        self.setFont(
+            QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont)
+        )
 
     @property
     def pygments_style(self) -> str:
@@ -116,6 +119,7 @@ class _JinjaEditor(QtWidgets.QWidget):
         self._widget_layout.addItem(self._spacer)
 
         self.output_label = QtWidgets.QLabel("Output")
+
         self._widget_layout.addWidget(
             self.output_label,
             3,
@@ -126,6 +130,9 @@ class _JinjaEditor(QtWidgets.QWidget):
         )
 
         self.output = QtWidgets.QLineEdit(self)
+        self.output.setFont(
+            QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont)
+        )
         self.output.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         self.output.setReadOnly(True)
         self._widget_layout.addWidget(self.output, 4, 0, 1, 2)
@@ -279,6 +286,9 @@ class LineEditSyntaxHighlighting(QtWidgets.QPlainTextEdit):
         )
         self._highlighter = PygmentsHighlighter(parent=self.document())
         self._highlighter.lexer = pygments.lexers.get_lexer_by_name("jinja")
+        self.setFont(
+            QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont)
+        )
 
     @property
     def pygments_style(self) -> str:
