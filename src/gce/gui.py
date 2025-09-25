@@ -48,12 +48,35 @@ class JinjaEditorDialog(QtWidgets.QDialog):
         self._jinja_editor.jina_text = text
 
     @property
-    def jinja_pygments_style(self):
-        return self._jinja_editor.jinja_pygments_style
+    def pygments_style(self):
+        return self._jinja_editor.pygments_style
 
-    @jinja_pygments_style.setter
-    def jinja_pygments_style(self, value: str) -> None:
-        self._jinja_editor.jinja_pygments_style = value
+    @pygments_style.setter
+    def pygments_style(self, value: str) -> None:
+        self._jinja_editor.pygments_style = value
+
+
+class XMLViewer(QtWidgets.QTextEdit):
+    style_colors_changed = QtCore.Signal()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setAcceptRichText(False)
+        self._highlighter = PygmentsHighlighter(parent=self.document())
+        self._highlighter.lexer = pygments.lexers.get_lexer_by_name("xml")
+
+    @property
+    def pygments_style(self) -> str:
+        return self._highlighter.style.name
+
+    @pygments_style.setter
+    def pygments_style(self, value: str):
+        if (
+            self._highlighter.style is None
+            or value != self._highlighter.style.name
+        ):
+            self._highlighter.style = pygments.styles.get_style_by_name(value)
+            self.style_colors_changed.emit()
 
 
 class _JinjaEditor(QtWidgets.QWidget):
@@ -71,8 +94,7 @@ class _JinjaEditor(QtWidgets.QWidget):
             alignment=QtCore.Qt.AlignmentFlag.AlignTop,
         )
 
-        self.xml_text_edit_widget = QtWidgets.QTextEdit(self)
-        self.xml_text_edit_widget.setAcceptRichText(False)
+        self.xml_text_edit_widget = XMLViewer(self)
         self.xml_text_edit_widget.setTabChangesFocus(True)
         self._widget_layout.addWidget(self.xml_text_edit_widget, 0, 1, 1, 1)
 
@@ -198,11 +220,12 @@ class JinjaEditor(QtWidgets.QWidget):
             self._widgets.output.setStyleSheet(error_style_sheet)
 
     @property
-    def jinja_pygments_style(self) -> str:
+    def pygments_style(self) -> str:
         return self._widgets.jinja_expression.pygments_style
 
-    @jinja_pygments_style.setter
-    def jinja_pygments_style(self, value: str) -> None:
+    @pygments_style.setter
+    def pygments_style(self, value: str) -> None:
+        self._widgets.xml_text_edit_widget.pygments_style = value
         self._widgets.jinja_expression.pygments_style = value
 
     @property
@@ -339,6 +362,15 @@ class PygmentsHighlighter(QtGui.QSyntaxHighlighter):
         self, color, bold=False, italic=False, underlined=False
     ):
         fmt = QtGui.QTextCharFormat()
+        if bold:
+            fmt.setFontWeight(QtGui.QFont.Weight.Bold)
+        if italic:
+            fmt.setFontItalic(True)
+        if underlined:
+            fmt.setUnderlineColor(color)
+            fmt.setUnderlineStyle(
+                QtGui.QTextCharFormat.UnderlineStyle.SingleUnderline
+            )
         fmt.setForeground(color)
         return fmt
 
