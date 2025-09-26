@@ -87,13 +87,7 @@ pipeline {
                             steps{
                                 sh(
                                     label: 'Create virtual environment with packaging in development mode',
-                                    script: '''python3 -m venv bootstrap_uv
-                                               bootstrap_uv/bin/pip install --disable-pip-version-check uv
-                                               bootstrap_uv/bin/uv venv venv --clear
-                                               UV_PROJECT_ENVIRONMENT=./venv bootstrap_uv/bin/uv sync --group ci
-                                               bootstrap_uv/bin/uv pip install --python=./venv/bin/python uv
-                                               rm -rf bootstrap_uv
-                                            '''
+                                    script: 'uv sync --group ci'
                                )
                             }
                         }
@@ -102,7 +96,7 @@ pipeline {
                                 stage('uv-secure'){
                                     steps{
                                         catchError(buildResult: 'SUCCESS', message: 'uv-secure found issues', stageResult: 'UNSTABLE') {
-                                            sh(label: 'Audit Requirement Freeze File', script: './venv/bin/uvx uv-secure --cache-path=/tmp/cache/uv-secure uv.lock')
+                                            sh(label: 'Audit Requirement Freeze File', script: 'uvx uv-secure --cache-path=/tmp/cache/uv-secure uv.lock')
                                         }
                                     }
                                 }
@@ -116,8 +110,8 @@ pipeline {
                                         catchError(buildResult: 'SUCCESS', message: 'Ruff found issues', stageResult: 'UNSTABLE') {
                                             sh(
                                              label: 'Running Ruff',
-                                             script: '''./venv/bin/uv run ruff check --config=pyproject.toml -o reports/ruffoutput.txt --output-format pylint --exit-zero
-                                                        ./venv/bin/uv run ruff check --config=pyproject.toml -o reports/ruffoutput.json --output-format json
+                                             script: '''uv run ruff check --config=pyproject.toml -o reports/ruffoutput.txt --output-format pylint --exit-zero
+                                                        uv run ruff check --config=pyproject.toml -o reports/ruffoutput.json --output-format json
                                                     '''
                                              )
                                         }
@@ -135,7 +129,7 @@ pipeline {
                                     }
                                     steps{
                                         catchError(buildResult: 'UNSTABLE', message: 'Did not pass all pytest tests', stageResult: 'UNSTABLE') {
-                                            sh(script: './venv/bin/uv run coverage run --parallel-mode --source=src -m pytest --junitxml=./reports/tests/pytest/pytest-junit.xml --capture=no')
+                                            sh(script: 'uv run coverage run --parallel-mode --source=src -m pytest --junitxml=./reports/tests/pytest/pytest-junit.xml --capture=no')
                                         }
                                     }
                                     post {
@@ -150,7 +144,7 @@ pipeline {
                                         catchError(buildResult: 'SUCCESS', message: 'MyPy found issues', stageResult: 'UNSTABLE') {
                                             tee('logs/mypy.log'){
                                                 sh(label: 'Running MyPy',
-                                                   script: './venv/bin/uv run mypy -p gce --html-report reports/mypy/html'
+                                                   script: 'uv run mypy -p gce --html-report reports/mypy/html'
                                                 )
                                             }
                                         }
@@ -168,9 +162,9 @@ pipeline {
                     post {
                         always{
                             sh(label:'combining coverage data and creating reports',
-                               script: '''./venv/bin/uv run coverage combine
-                                          ./venv/bin/uv run coverage xml -o reports/coverage.xml
-                                          ./venv/bin/uv run coverage html -d reports/coverage
+                               script: '''uv run coverage combine
+                                          uv run coverage xml -o reports/coverage.xml
+                                          uv run coverage html -d reports/coverage
                                        '''
                             )
                             stash includes: 'reports/coverage.xml', name: 'COVERAGE_REPORT_DATA'
@@ -207,7 +201,7 @@ pipeline {
                     stages{
                         stage('Build Application Bundle'){
                             agent{
-                                label 'mac && python3 && x86_64'
+                                label 'mac && python3'
                             }
                             environment{
                                 UV_CONFIG_FILE=createUVConfig()
