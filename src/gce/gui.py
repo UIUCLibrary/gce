@@ -10,6 +10,7 @@ from PySide6 import QtWidgets, QtCore, QtGui
 import pygments.styles
 import pygments.lexers
 from galatea.merge_data import serialize_with_jinja_template, MappingConfig
+from gce import models
 
 if typing.TYPE_CHECKING:
     from pygments.style import Style as PygmentsStyle
@@ -287,7 +288,9 @@ class LineEditSyntaxHighlighting(QtWidgets.QPlainTextEdit):
         self._highlighter = PygmentsHighlighter(parent=self.document())
         self._highlighter.lexer = pygments.lexers.get_lexer_by_name("jinja")
         self.setFont(
-            QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont)
+            QtGui.QFontDatabase.systemFont(
+                QtGui.QFontDatabase.SystemFont.FixedFont
+            )
         )
 
     @property
@@ -395,3 +398,45 @@ class PygmentsHighlighter(QtGui.QSyntaxHighlighter):
                 self.setFormat(start, length, self._formats[token_type])
             else:
                 logger.warning("%s was called but not implemented", token_type)
+
+
+class TomlView(QtWidgets.QTreeView):
+    def __init__(self, parent: QtWidgets.QWidget) -> None:
+        super().__init__(parent)
+        self.setSelectionMode(
+            QtWidgets.QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.clicked.connect(self._edit)
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+        if (
+            event.key() == QtCore.Qt.Key.Key_Return
+            or event.key() == QtCore.Qt.Key.Key_Enter
+        ):
+            if self.state() != self.State.EditingState:
+                for index in self.selectedIndexes():
+                    if index.column() == 1:
+                        self._edit(index)
+        super().keyPressEvent(event)
+
+    def _edit(self, index: QtCore.QModelIndex) -> None:
+        if index.column() == 1:
+            if index.internalPointer().is_editable:
+                self.edit(index)
+
+
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._view = TomlView(parent=self)
+        self._view.setAlternatingRowColors(True)
+        self.setCentralWidget(self._view)
+        self.setWindowTitle("TOML Editor")
+        self._view.setFocus()
+
+    def set_toml_file(self, toml_file: str) -> None:
+        with open(toml_file) as fp:
+            model = models.load_toml_fp(fp)
+        self._view.setModel(model)
+        self._view.setColumnWidth(0, 300)
+        # self._view.expandAll()

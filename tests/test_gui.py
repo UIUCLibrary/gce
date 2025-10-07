@@ -1,3 +1,4 @@
+import io
 import os
 from unittest.mock import Mock
 
@@ -6,6 +7,7 @@ import pygments.style
 import pytest
 from PySide6 import QtWidgets, QtCore, QtTest
 
+import gce.models
 from gce import gui
 
 
@@ -175,3 +177,37 @@ class TestJinjaRenderer:
         output = renderer.render()
         assert "" == output
         assert renderer.is_valid is True
+
+class TestTomlView:
+    @pytest.fixture
+    def example_toml_data_fp(self):
+        with io.StringIO() as stream:
+            stream.write("""
+[mappings]
+identifier_key = "Bibliographic Identifier"
+
+[[mapping]]
+key = "Uniform Title"
+matching_marc_fields = ["240$a"]
+delimiter = "||"
+existing_data = "keep"
+
+[[mapping]]
+key = "Dummy"
+matching_marc_fields = ["220$a"]
+delimiter = "||"
+existing_data = "keep"
+""")
+            stream.seek(0)
+            yield stream
+
+    def test_keyboard_edit_toggle(self, qtbot, example_toml_data_fp):
+        model = gce.models.load_toml_fp(example_toml_data_fp)
+        base = QtWidgets.QWidget()
+        qtbot.addWidget(base)
+        view = gui.TomlView(base)
+        view.setModel(model)
+        view.setCurrentIndex(model.index(0,0))
+        assert view.state() != QtWidgets.QAbstractItemView.State.EditingState
+        qtbot.keyPress(view, QtCore.Qt.Key.Key_Return)
+        assert view.state() == QtWidgets.QAbstractItemView.State.EditingState
