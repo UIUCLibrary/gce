@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pathlib
 import xml.etree.ElementTree as ET
 import logging
 import typing
@@ -9,6 +10,7 @@ import jinja2
 from PySide6 import QtWidgets, QtCore, QtGui
 import pygments.styles
 import pygments.lexers
+import galatea
 from galatea.merge_data import serialize_with_jinja_template, MappingConfig
 from gce import models
 
@@ -426,17 +428,122 @@ class TomlView(QtWidgets.QTreeView):
 
 
 class MainWindow(QtWidgets.QMainWindow):
+    save_file_requested = QtCore.Signal(QtCore.QUrl)
+    open_file_requested = QtCore.Signal()
+    status_message_updated = QtCore.Signal(str, int)
+
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self._view = TomlView(parent=self)
-        self._view.setAlternatingRowColors(True)
-        self.setCentralWidget(self._view)
+        self.toml_view = TomlView(parent=self)
+        self.toml_view.setAlternatingRowColors(True)
+        self._current_file: Optional[str] = None
+        self.setCentralWidget(self.toml_view)
         self.setWindowTitle("TOML Editor")
-        self._view.setFocus()
+        toolbar = QtWidgets.QToolBar("File Toolbar")
+        self.addToolBar(QtCore.Qt.ToolBarArea.LeftToolBarArea, toolbar)
+        toolbar.setMovable(False)
+        self.status_bar = self.statusBar()
+        self.load_action = QtGui.QAction(
+            QtGui.QIcon.fromTheme(QtGui.QIcon.ThemeIcon.DocumentOpen),
+            "&Open",
+            self,
+        )
+        self.load_action.setShortcut(QtGui.QKeySequence.StandardKey.Open)
+        self.save_action = QtGui.QAction(
+            QtGui.QIcon.fromTheme(QtGui.QIcon.ThemeIcon.DocumentSave),
+            "&Save",
+            enabled=False,
+            parent=self,
+        )
+        self.save_action.setShortcut(QtGui.QKeySequence.StandardKey.Save)
+        self._connect_toolbar(toolbar)
+        self.addToolBar(QtCore.Qt.ToolBarArea.LeftToolBarArea, toolbar)
+        self.state = NothingLoadedState(self)
+        self.toml_view.setFocus()
+        self.load_toml_strategy = load_toml
+
+    def _connect_toolbar(self, toolbar):
+        self.load_action.triggered.connect(self.open_file_requested)
+        toolbar.addAction(self.load_action)
+        self.save_action.triggered.connect(
+            lambda: self.save_file_requested.emit(
+                QtCore.QUrl.fromLocalFile(self._current_file)
+            )
+            if self._current_file
+            else None
+        )
+        toolbar.addAction(self.save_action)
+
+    @property
+    def current_file(self):
+        return self._current_file
+
+    @current_file.setter
+    def current_file(self, value):
+        self.set_toml_file(toml_file=value)
 
     def set_toml_file(self, toml_file: str) -> None:
-        with open(toml_file) as fp:
-            model = models.load_toml_fp(fp)
-        self._view.setModel(model)
-        self._view.setColumnWidth(0, 300)
-        # self._view.expandAll()
+        self._current_file = toml_file
+        self.state.set_toml_file(toml_file)
+
+
+def load_toml(toml_file: pathlib.Path) -> models.TomlModel:
+    with toml_file.open() as fp:
+        try:
+            return models.load_toml_fp(fp)
+        except galatea.merge_data.BadMappingDataError as e:
+            raise galatea.merge_data.BadMappingFileError(
+                source_file=toml_file,
+                details=f"Error parsing {toml_file.name}.\n{e.details}",
+            ) from e
+
+
+class AbsMainWindowState(abc.ABC):
+    def __init__(self, context: MainWindow) -> None:
+        self.context = context
+
+    def set_toml_file(
+        self,
+        toml_file: str,
+    ) -> None: ...
+
+
+class StateUtility:
+    @staticmethod
+    def set_toml_file(context: MainWindow, toml_file: pathlib.Path) -> None:
+        context.save_action.setEnabled(True)
+        try:
+            model = context.load_toml_strategy(pathlib.Path(toml_file))
+
+        except (
+            galatea.merge_data.BadMappingFileError,
+            galatea.merge_data.BadMappingDataError,
+        ) as e:
+            context.status_message_updated.emit(e.details, logging.ERROR)
+            context.status_message_updated.emit(
+                f"Unable to open {pathlib.Path(toml_file).name}", logging.INFO
+            )
+            context.state = NothingLoadedState(context)
+            return
+        model.setParent(context.toml_view)
+        context.toml_view.setModel(model)
+        context.toml_view.setColumnWidth(0, 300)
+        context.status_message_updated.emit(
+            f"Opened {pathlib.Path(toml_file).name}", logging.INFO
+        )
+        context.setWindowTitle(f"TOML Editor: {pathlib.Path(toml_file).name}")
+        context.state = FileLoadedUnmodifiedState(context)
+
+
+class NothingLoadedState(AbsMainWindowState):
+    def set_toml_file(self, toml_file: str) -> None:
+        StateUtility.set_toml_file(
+            context=self.context, toml_file=pathlib.Path(toml_file)
+        )
+
+
+class FileLoadedUnmodifiedState(AbsMainWindowState):
+    def set_toml_file(self, toml_file: str) -> None:
+        StateUtility.set_toml_file(
+            context=self.context, toml_file=pathlib.Path(toml_file)
+        )

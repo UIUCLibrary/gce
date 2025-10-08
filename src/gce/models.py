@@ -8,6 +8,8 @@ from typing import (
     Generic,
 )
 import typing
+
+import galatea.merge_data
 from PySide6 import QtCore
 import tomllib
 import tomli_w
@@ -301,16 +303,25 @@ def convert_item_model_to_dictionary(
 
 
 def load_toml_fp(fp: io.TextIOBase) -> TomlModel:
-    data: TomlConfigFormat = typing.cast(
-        TomlConfigFormat, tomllib.loads(fp.read())
-    )
+    try:
+        data: TomlConfigFormat = typing.cast(
+            TomlConfigFormat, tomllib.loads(fp.read())
+        )
+    except tomllib.TOMLDecodeError as error:
+        raise galatea.merge_data.BadMappingDataError(
+            details=str(error)
+        ) from error
     model = TomlModel()
-    for key, value in data["mappings"].items():
-        model.add_top_level_config(key, value)
+    try:
+        for key, value in data["mappings"].items():
+            model.add_top_level_config(key, value)
 
-    for item in data["mapping"]:
-        model.add_mapping(item)
-
+        for item in data["mapping"]:
+            model.add_mapping(item)
+    except KeyError as error:
+        raise galatea.merge_data.BadMappingDataError(
+            details="Not a valid galatea mapping configration toml format file"
+        ) from error
     return model
 
 

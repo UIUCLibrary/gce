@@ -1,13 +1,16 @@
 import io
+import logging
 import os
 from unittest.mock import Mock
 
+import galatea.merge_data
 import pygments.lexer
 import pygments.style
 import pytest
 from PySide6 import QtWidgets, QtCore, QtTest
 
 import gce.models
+import gce.actions
 from gce import gui
 
 
@@ -178,6 +181,7 @@ class TestJinjaRenderer:
         assert "" == output
         assert renderer.is_valid is True
 
+
 class TestTomlView:
     @pytest.fixture
     def example_toml_data_fp(self):
@@ -207,7 +211,57 @@ existing_data = "keep"
         qtbot.addWidget(base)
         view = gui.TomlView(base)
         view.setModel(model)
-        view.setCurrentIndex(model.index(0,0))
+        view.setCurrentIndex(model.index(0, 0))
         assert view.state() != QtWidgets.QAbstractItemView.State.EditingState
         qtbot.keyPress(view, QtCore.Qt.Key.Key_Return)
         assert view.state() == QtWidgets.QAbstractItemView.State.EditingState
+
+
+class TestMainWindow:
+    def test_load_action(self, qtbot):
+        mw = gui.MainWindow()
+        qtbot.addWidget(mw)
+        with qtbot.waitSignal(mw.open_file_requested):
+            mw.load_action.trigger()
+
+    def test_save_action(self, qtbot):
+        mw = gui.MainWindow()
+        qtbot.addWidget(mw)
+        mw.load_toml_strategy = lambda _: gce.models.TomlModel()
+        with qtbot.waitSignal(mw.save_file_requested):
+            mw.set_toml_file("dummy.toml")
+            mw.save_action.trigger()
+
+    def test_state_no_file_means_save_is_disabled(self, qtbot):
+        mw = gui.MainWindow()
+        qtbot.addWidget(mw)
+        assert mw.save_action.isEnabled() is False
+
+    def test_set_toml_file_with_bad_data_sets_empty_state(self, qtbot):
+        mw = gui.MainWindow()
+        qtbot.addWidget(mw)
+
+        mw.load_toml_strategy = Mock(return_value=gui.models.TomlModel())
+        mw.set_toml_file("goodfile.toml")
+        assert not isinstance(mw.state,gui.NothingLoadedState)
+
+        mw.load_toml_strategy = Mock(
+            side_effect=galatea.merge_data.BadMappingFileError(
+                source_file="badfile.toml"
+            )
+        )
+        mw.set_toml_file("badfile.toml")
+        assert isinstance(mw.state, gui.NothingLoadedState)
+
+    def test_set_toml_file_with_error_writes_to_error(self, qtbot):
+        mw = gui.MainWindow()
+        qtbot.addWidget(mw)
+        mw.load_toml_strategy = Mock(
+            side_effect=galatea.merge_data.BadMappingFileError(
+                source_file="badfile.toml", details="bad data"
+            )
+        )
+        with qtbot.waitSignal(mw.status_message_updated) as update:
+            mw.set_toml_file("badfile.toml")
+            assert type(mw.state) == gui.NothingLoadedState
+        assert update.args == ["bad data", logging.ERROR]
