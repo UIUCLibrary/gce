@@ -198,8 +198,11 @@ class TomlModel(QtCore.QAbstractItemModel):
         if role == QtCore.Qt.ItemDataRole.EditRole:
             node = index.internalPointer()
             if index.column() == 1 and node.is_editable:
-                node.value = value
-                return True
+                if node.value != value:
+                    node.value = value
+                    self.dataChanged.emit(index, index)
+                    return True
+                return False
         return False
 
     def data(
@@ -327,3 +330,9 @@ def load_toml_fp(fp: io.TextIOBase) -> TomlModel:
 
 def export_toml(model: TomlModel) -> str:
     return tomli_w.dumps(convert_item_model_to_dictionary(model))
+
+
+def data_has_changed(original_toml_text: str, model: TomlModel) -> bool:
+    return tomllib.loads(
+        original_toml_text
+    ) != convert_item_model_to_dictionary(model)

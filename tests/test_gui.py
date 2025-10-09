@@ -1,7 +1,8 @@
 import io
 import logging
 import os
-from unittest.mock import Mock
+import pathlib
+from unittest.mock import Mock, ANY, MagicMock, patch, mock_open
 
 import galatea.merge_data
 import pygments.lexer
@@ -9,6 +10,7 @@ import pygments.style
 import pytest
 from PySide6 import QtWidgets, QtCore, QtTest
 
+import gce.gui
 import gce.models
 import gce.actions
 from gce import gui
@@ -227,9 +229,15 @@ class TestMainWindow:
     def test_save_action(self, qtbot):
         mw = gui.MainWindow()
         qtbot.addWidget(mw)
-        mw.load_toml_strategy = lambda _: gce.models.TomlModel()
+        starting_model = gce.models.TomlModel()
+        starting_model.add_top_level_config("bacon", "eggs")
+        mw.load_toml_strategy = lambda _: starting_model
+        mw.toml_file = "dummy.toml"
         with qtbot.waitSignal(mw.save_file_requested):
-            mw.set_toml_file("dummy.toml")
+            mw.is_model_data_different_than_file = lambda *_: True
+            mw.toml_view.model().setData(
+                mw.toml_view.model().index(0, 1), "spam"
+            )
             mw.save_action.trigger()
 
     def test_state_no_file_means_save_is_disabled(self, qtbot):
@@ -242,16 +250,16 @@ class TestMainWindow:
         qtbot.addWidget(mw)
 
         mw.load_toml_strategy = Mock(return_value=gui.models.TomlModel())
-        mw.set_toml_file("goodfile.toml")
-        assert not isinstance(mw.state,gui.NothingLoadedState)
+        mw.toml_file = "goodfile.toml"
+        assert not isinstance(mw.state, gui.NoDocumentLoadedState)
 
         mw.load_toml_strategy = Mock(
             side_effect=galatea.merge_data.BadMappingFileError(
                 source_file="badfile.toml"
             )
         )
-        mw.set_toml_file("badfile.toml")
-        assert isinstance(mw.state, gui.NothingLoadedState)
+        mw.toml_file = "badfile.toml"
+        assert isinstance(mw.state, gui.NoDocumentLoadedState)
 
     def test_set_toml_file_with_error_writes_to_error(self, qtbot):
         mw = gui.MainWindow()
@@ -262,6 +270,255 @@ class TestMainWindow:
             )
         )
         with qtbot.waitSignal(mw.status_message_updated) as update:
-            mw.set_toml_file("badfile.toml")
-            assert type(mw.state) == gui.NothingLoadedState
+            mw.toml_file = "badfile.toml"
+            assert isinstance(mw.state, gui.NoDocumentLoadedState)
         assert update.args == ["bad data", logging.ERROR]
+
+    def test_loading_toml_file_without_editing_has_save_disabled(self, qtbot):
+        mw = gui.MainWindow()
+        qtbot.addWidget(mw)
+        assert mw.save_action.isEnabled() is False
+        mw.load_toml_strategy = lambda _: gce.models.TomlModel()
+        mw.toml_file = "dummy.toml"
+        assert mw.save_action.isEnabled() is False
+
+    def test_loading_toml_file_editing_has_enables_save(self, qtbot):
+        mw = gui.MainWindow()
+        qtbot.addWidget(mw)
+        mw.is_model_data_different_than_file = lambda *_: False
+        assert mw.save_action.isEnabled() is False
+        dummy = gce.models.TomlModel()
+        dummy.add_top_level_config("spam", "bacon")
+        mw.load_toml_strategy = lambda _: dummy
+        mw.toml_file = "dummy.toml"
+        model = mw.toml_view.model()
+        mw.is_model_data_different_than_file = lambda *_: True
+        with qtbot.waitSignal(model.dataChanged):
+            assert model.setData(model.index(0, 1), "eggs")
+        assert mw.save_action.isEnabled() is True
+
+    def test_loading_bad_file_while_have_working_one(self, qtbot):
+        mw = gui.MainWindow()
+        qtbot.addWidget(mw)
+        assert mw.toml_view.model() is None
+        load_good_data = gce.models.TomlModel()
+        load_good_data.add_top_level_config("spam", "bacon")
+        mw.load_toml_strategy = lambda _: load_good_data
+        mw.toml_file = "spam.toml"
+        assert mw.toml_view.model().rowCount() == 2
+
+        def load_bad_data(toml_file: pathlib.Path):
+            raise galatea.merge_data.BadMappingFileError(source_file=toml_file)
+
+        mw.load_toml_strategy = load_bad_data
+        mw.toml_file = "bad_data.toml"
+        assert mw.toml_view.model() is None
+
+    @patch(
+        "pathlib.Path.open", new_callable=mock_open, read_data="mocked content"
+    )
+    def test_is_model_data_different_than_file(self, mock_file_open, qtbot):
+        mw = gui.MainWindow()
+        qtbot.addWidget(mw)
+        model = Mock()
+        comparison_strategy = Mock()
+        mw.is_model_data_different_than_file(
+            pathlib.Path("something.toml"), model, comparison_strategy
+        )
+        comparison_strategy.assert_called_once_with("mocked content", model)
+
+    def test_write_to_file_calls_state_method(self, qtbot):
+        mw = gui.MainWindow()
+        qtbot.addWidget(mw)
+        model = Mock()
+        mw.state.write_toml_file = Mock()
+        toml_file = pathlib.Path("something.toml")
+        mw.write_to_file(toml_file, model)
+        mw.state.write_toml_file.assert_called_once_with(toml_file, model)
+
+
+class TestNoDocumentLoadedState:
+    @pytest.mark.parametrize(
+        "method_name, args",
+        [
+            ("write_toml_file", [pathlib.Path("something"), None]),
+            ("data_modified", [Mock(name="tomlModel")]),
+        ],
+    )
+    def test_no_op_states(self, method_name, args):
+        main_window = Mock(spec_set=True)
+        state = gce.gui.NoDocumentLoadedState(main_window)
+        method = getattr(state, method_name)
+        method(*args)
+        main_window.assert_not_called()
+
+    def test_set_toml_file(self, monkeypatch):
+        main_window = Mock()
+        set_toml_file = Mock()
+        monkeypatch.setattr(
+            gce.gui.StateUtility, "set_toml_file", set_toml_file
+        )
+        state = gce.gui.NoDocumentLoadedState(main_window)
+        state.set_toml_file(pathlib.Path("something"))
+
+
+class TestFileLoadedUnmodifiedState:
+    @pytest.mark.parametrize(
+        "method_name, args",
+        [
+            ("write_toml_file", [pathlib.Path("something"), None]),
+        ],
+    )
+    def test_no_op_states(self, method_name, args):
+        main_window = Mock(spec_set=True)
+        state = gce.gui.FileLoadedUnmodifiedState(main_window)
+        method = getattr(state, method_name)
+        method(*args)
+        main_window.assert_not_called()
+
+    def test_set_toml_file(self, monkeypatch):
+        main_window = Mock(spec_set=True)
+        state = gce.gui.FileLoadedUnmodifiedState(main_window)
+        set_toml_file = Mock(
+            name="set_toml_file", spec_set=gce.gui.StateUtility.set_toml_file
+        )
+        monkeypatch.setattr(
+            gce.gui.StateUtility, "set_toml_file", set_toml_file
+        )
+        model = Mock()
+        state.set_toml_file(model)
+        set_toml_file.assert_called_with(main_window, model)
+
+    def test_data_modified(self, monkeypatch):
+        main_window = Mock(spec_set=True)
+        state = gce.gui.FileLoadedUnmodifiedState(main_window)
+        update_window = Mock(
+            name="update_window", spec_set=gce.gui.StateUtility.update_window
+        )
+        monkeypatch.setattr(
+            gce.gui.StateUtility, "update_window", update_window
+        )
+        model = Mock()
+        state.data_modified(model)
+        update_window.assert_called_with(main_window, model)
+
+
+class TestFileLoadedModifiedState:
+    def test_data_modified(self, monkeypatch):
+        main_window = Mock(spec_set=True)
+        state = gce.gui.FileLoadedModifiedState(main_window)
+        update_window = Mock(
+            name="update_window", spec_set=gce.gui.StateUtility.update_window
+        )
+        monkeypatch.setattr(
+            gce.gui.StateUtility, "update_window", update_window
+        )
+        model = Mock()
+        state.data_modified(model)
+        update_window.assert_called_with(main_window, model)
+
+    def test_write_toml_file(self, monkeypatch):
+        main_window = Mock()
+        state = gce.gui.FileLoadedModifiedState(main_window)
+        update_window = Mock(
+            name="update_window", spec_set=gce.gui.StateUtility.update_window
+        )
+        monkeypatch.setattr(
+            gce.gui.StateUtility, "update_window", update_window
+        )
+        model = Mock()
+
+        state.write_toml_file(pathlib.Path("somefile"), model)
+        update_window.assert_called_with(main_window, model)
+        main_window.write_toml_strategy.assert_called_with(
+            pathlib.Path("somefile"), model
+        )
+
+    def test_set_toml_file(self, monkeypatch):
+        main_window = Mock()
+        state = gce.gui.FileLoadedModifiedState(main_window)
+        set_toml_file = Mock(
+            name="set_toml_file", spec_set=gce.gui.StateUtility.set_toml_file
+        )
+        monkeypatch.setattr(
+            gce.gui.StateUtility, "set_toml_file", set_toml_file
+        )
+        update_window = Mock(
+            name="update_window", spec_set=gce.gui.StateUtility.update_window
+        )
+        monkeypatch.setattr(
+            gce.gui.StateUtility, "update_window", update_window
+        )
+        state.set_toml_file(pathlib.Path("somefile"))
+        set_toml_file.assert_called_with(main_window, pathlib.Path("somefile"))
+        update_window.assert_called_with(main_window, ANY)
+
+
+class TestStateUtility:
+    def test_set_toml_file_success_changes_state_to_unmodified(self):
+        main_window = Mock()
+        toml_file = pathlib.Path("somefile")
+        gce.gui.StateUtility.set_toml_file(main_window, toml_file)
+        assert isinstance(main_window.state, gce.gui.FileLoadedUnmodifiedState)
+
+    def test_set_toml_file_unsuccess_changes_state_to_no_document_loaded(self):
+        main_window = Mock(
+            load_toml_strategy=Mock(
+                side_effect=galatea.merge_data.BadMappingDataError(
+                    details="something went wrong"
+                )
+            )
+        )
+        toml_file = pathlib.Path("somefile")
+        gce.gui.StateUtility.set_toml_file(main_window, toml_file)
+        assert isinstance(main_window.state, gce.gui.NoDocumentLoadedState)
+
+    def test_update_window_with_no_model_sets_window_title_to_default(self):
+        main_window = Mock()
+        gce.gui.StateUtility.update_window(main_window, None)
+        main_window.setWindowTitle.assert_called_once_with("TOML Editor")
+
+    def test_update_window_no_changes_set_to_unmodified_state(self):
+        main_window = Mock(toml_file="dummy.toml")
+        main_window.is_model_data_different_than_file = lambda *_: False
+        toml_model = Mock()
+        gce.gui.StateUtility.update_window(main_window, toml_model)
+        assert isinstance(main_window.state, gce.gui.FileLoadedUnmodifiedState)
+
+    def test_update_window_changes_set_to_modified_state(self):
+        main_window = Mock(toml_file="dummy.toml")
+        main_window.is_model_data_different_than_file = lambda *_: True
+        toml_model = Mock()
+        gce.gui.StateUtility.update_window(main_window, toml_model)
+        assert isinstance(main_window.state, gce.gui.FileLoadedModifiedState)
+
+
+def test_write_toml():
+    file_path = Mock(open=MagicMock(), spec_set=pathlib.Path)
+    model = Mock()
+    serialization_strategy = Mock()
+    gce.gui.write_toml(
+        file_path, model, serialization_strategy=serialization_strategy
+    )
+    serialization_strategy.assert_called_once_with(model)
+
+
+@patch("pathlib.Path.open", new_callable=mock_open, read_data="mocked content")
+def test_load_toml(mock_file_open):
+    load_strategy = Mock()
+    gce.gui.load_toml(pathlib.Path("somefile"), load_strategy=load_strategy)
+    mock_file_open.assert_called_once()
+
+
+@patch("pathlib.Path.open", new_callable=mock_open, read_data="mocked content")
+def test_load_toml_bad_mapping_data_passes_to_bad_mapping_file(mock_file_open):
+    load_strategy = Mock(
+        side_effect=galatea.merge_data.BadMappingDataError(
+            details="something went wrong"
+        )
+    )
+    with pytest.raises(galatea.merge_data.BadMappingFileError) as error:
+        gce.gui.load_toml(
+            pathlib.Path("somefile"), load_strategy=load_strategy
+        )
+    assert error.value.source == pathlib.Path("somefile")

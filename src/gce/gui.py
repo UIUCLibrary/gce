@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import abc
 import pathlib
 import xml.etree.ElementTree as ET
 import logging
@@ -432,13 +433,24 @@ class MainWindow(QtWidgets.QMainWindow):
     open_file_requested = QtCore.Signal()
     status_message_updated = QtCore.Signal(str, int)
 
+    @classmethod
+    def is_model_data_different_than_file(
+        cls,
+        toml_file: pathlib.Path,
+        toml_model: models.TomlModel,
+        comparison_strategy=models.data_has_changed,
+    ) -> bool:
+        with toml_file.open() as f:
+            og_text = f.read()
+        return comparison_strategy(og_text, toml_model)
+
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.toml_view = TomlView(parent=self)
         self.toml_view.setAlternatingRowColors(True)
         self._current_file: Optional[str] = None
         self.setCentralWidget(self.toml_view)
-        self.setWindowTitle("TOML Editor")
+        # self.setWindowTitle("TOML Editor")
         toolbar = QtWidgets.QToolBar("File Toolbar")
         self.addToolBar(QtCore.Qt.ToolBarArea.LeftToolBarArea, toolbar)
         toolbar.setMovable(False)
@@ -458,9 +470,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.save_action.setShortcut(QtGui.QKeySequence.StandardKey.Save)
         self._connect_toolbar(toolbar)
         self.addToolBar(QtCore.Qt.ToolBarArea.LeftToolBarArea, toolbar)
-        self.state = NothingLoadedState(self)
+        self.state: MainWindowState = NoDocumentLoadedState(self)
+        StateUtility.update_window(
+            self, typing.cast(models.TomlModel, self.toml_view.model())
+        )
         self.toml_view.setFocus()
         self.load_toml_strategy = load_toml
+        self.write_toml_strategy = write_toml
 
     def _connect_toolbar(self, toolbar):
         self.load_action.triggered.connect(self.open_file_requested)
@@ -475,22 +491,36 @@ class MainWindow(QtWidgets.QMainWindow):
         toolbar.addAction(self.save_action)
 
     @property
-    def current_file(self):
+    def toml_file(self):
         return self._current_file
 
-    @current_file.setter
-    def current_file(self, value):
-        self.set_toml_file(toml_file=value)
+    @toml_file.setter
+    def toml_file(self, value: str) -> None:
+        self._current_file = value
+        self.state.set_toml_file(pathlib.Path(value))
 
-    def set_toml_file(self, toml_file: str) -> None:
-        self._current_file = toml_file
-        self.state.set_toml_file(toml_file)
+    def write_to_file(
+        self, file: pathlib.Path, model: models.TomlModel
+    ) -> None:
+        self.state.write_toml_file(file, model)
 
 
-def load_toml(toml_file: pathlib.Path) -> models.TomlModel:
+def write_toml(
+    toml_file: pathlib.Path,
+    model: models.TomlModel,
+    serialization_strategy=models.export_toml,
+) -> None:
+    data = serialization_strategy(model)
+    with toml_file.open("w", encoding="utf-8") as f:
+        f.write(data)
+
+
+def load_toml(
+    toml_file: pathlib.Path, load_strategy=models.load_toml_fp
+) -> models.TomlModel:
     with toml_file.open() as fp:
         try:
-            return models.load_toml_fp(fp)
+            return load_strategy(fp)
         except galatea.merge_data.BadMappingDataError as e:
             raise galatea.merge_data.BadMappingFileError(
                 source_file=toml_file,
@@ -498,32 +528,41 @@ def load_toml(toml_file: pathlib.Path) -> models.TomlModel:
             ) from e
 
 
-class AbsMainWindowState(abc.ABC):
+class MainWindowState(abc.ABC):
     def __init__(self, context: MainWindow) -> None:
         self.context = context
 
     def set_toml_file(
         self,
-        toml_file: str,
+        toml_file: pathlib.Path,
     ) -> None: ...
+    def data_modified(self, toml_model: models.TomlModel): ...
+
+    def write_toml_file(
+        self, file: pathlib.Path, toml_model: models.TomlModel
+    ): ...
 
 
 class StateUtility:
     @staticmethod
     def set_toml_file(context: MainWindow, toml_file: pathlib.Path) -> None:
-        context.save_action.setEnabled(True)
         try:
             model = context.load_toml_strategy(pathlib.Path(toml_file))
+            model.dataChanged.connect(
+                lambda *_: context.state.data_modified(model)
+            )
 
         except (
             galatea.merge_data.BadMappingFileError,
             galatea.merge_data.BadMappingDataError,
         ) as e:
+            context.save_action.setEnabled(False)
+            context.toml_view.setModel(None)
             context.status_message_updated.emit(e.details, logging.ERROR)
             context.status_message_updated.emit(
                 f"Unable to open {pathlib.Path(toml_file).name}", logging.INFO
             )
-            context.state = NothingLoadedState(context)
+            context.state = NoDocumentLoadedState(context)
             return
         model.setParent(context.toml_view)
         context.toml_view.setModel(model)
@@ -534,16 +573,59 @@ class StateUtility:
         context.setWindowTitle(f"TOML Editor: {pathlib.Path(toml_file).name}")
         context.state = FileLoadedUnmodifiedState(context)
 
+    @staticmethod
+    def update_window(
+        context: MainWindow, toml_model: Optional[models.TomlModel]
+    ) -> None:
+        if toml_model is None:
+            context.setWindowTitle("TOML Editor")
+            context.save_action.setEnabled(False)
+            return
 
-class NothingLoadedState(AbsMainWindowState):
-    def set_toml_file(self, toml_file: str) -> None:
-        StateUtility.set_toml_file(
-            context=self.context, toml_file=pathlib.Path(toml_file)
+        if context.is_model_data_different_than_file(
+            pathlib.Path(context.toml_file), toml_model
+        ):
+            context.save_action.setEnabled(True)
+            file_name = pathlib.Path(context.toml_file).name
+            context.setWindowTitle(f"TOML Editor: {file_name} (Unsaved)")
+            context.state = FileLoadedModifiedState(context)
+        else:
+            context.state = FileLoadedUnmodifiedState(context)
+
+            context.setWindowTitle(
+                f"TOML Editor: {pathlib.Path(context.toml_file).name}"
+            )
+            context.save_action.setEnabled(False)
+
+
+class NoDocumentLoadedState(MainWindowState):
+    def set_toml_file(self, toml_file: pathlib.Path) -> None:
+        StateUtility.set_toml_file(context=self.context, toml_file=toml_file)
+
+
+class FileLoadedModifiedState(MainWindowState):
+    def set_toml_file(self, toml_file: pathlib.Path) -> None:
+        StateUtility.set_toml_file(context=self.context, toml_file=toml_file)
+        StateUtility.update_window(
+            context=self.context,
+            toml_model=typing.cast(
+                Optional[models.TomlModel], self.context.toml_view.model()
+            ),
         )
 
+    def data_modified(self, toml_model: models.TomlModel) -> None:
+        StateUtility.update_window(context=self.context, toml_model=toml_model)
 
-class FileLoadedUnmodifiedState(AbsMainWindowState):
-    def set_toml_file(self, toml_file: str) -> None:
-        StateUtility.set_toml_file(
-            context=self.context, toml_file=pathlib.Path(toml_file)
-        )
+    def write_toml_file(
+        self, file: pathlib.Path, toml_model: models.TomlModel
+    ):
+        self.context.write_toml_strategy(file, toml_model)
+        StateUtility.update_window(context=self.context, toml_model=toml_model)
+
+
+class FileLoadedUnmodifiedState(MainWindowState):
+    def set_toml_file(self, toml_file: pathlib.Path) -> None:
+        StateUtility.set_toml_file(context=self.context, toml_file=toml_file)
+
+    def data_modified(self, toml_model: models.TomlModel) -> None:
+        StateUtility.update_window(context=self.context, toml_model=toml_model)

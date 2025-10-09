@@ -7,6 +7,7 @@ from PySide6 import QtCore
 import tomllib
 from gce import models
 
+
 class TestTomlModel:
     @pytest.fixture
     def toml_data(self):
@@ -255,6 +256,16 @@ jinja_template = "{% for field in fields['700'] %}{{ field['a'] }}{% if field['q
             )
             == expected
         )
+
+
+def test_data_has_changed(example_toml_data_fp):
+    model = models.load_toml_fp(example_toml_data_fp)
+    example_toml_data_fp.seek(0)
+    starting_data = example_toml_data_fp.read()
+    assert models.data_has_changed(starting_data, model) is False
+    index = model.index(0, 1)
+    model.setData(index, "somthingelse")
+    assert models.data_has_changed(starting_data, model)
 
 
 @pytest.fixture
