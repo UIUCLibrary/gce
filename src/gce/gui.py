@@ -5,7 +5,7 @@ import pathlib
 import xml.etree.ElementTree as ET
 import logging
 import typing
-from typing import Type, Optional
+from typing import Type, Optional, Union
 
 import jinja2
 from PySide6 import QtWidgets, QtCore, QtGui
@@ -478,6 +478,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.load_toml_strategy = load_toml
         self.write_toml_strategy = write_toml
 
+    @property
+    def unsaved_changes(self) -> bool:
+        if self.toml_file is None:
+            return False
+        model = typing.cast(Optional[models.TomlModel], self.toml_view.model())
+        if model is None:
+            raise ValueError(
+                f"toml model not loaded in viewer. toml_file = {self.toml_file}"
+            )
+        return self.is_model_data_different_than_file(
+            pathlib.Path(self.toml_file), model
+        )
+
     def _connect_toolbar(self, toolbar):
         self.load_action.triggered.connect(self.open_file_requested)
         toolbar.addAction(self.load_action)
@@ -491,13 +504,15 @@ class MainWindow(QtWidgets.QMainWindow):
         toolbar.addAction(self.save_action)
 
     @property
-    def toml_file(self):
+    def toml_file(self) -> Optional[str]:
         return self._current_file
 
     @toml_file.setter
-    def toml_file(self, value: str) -> None:
+    def toml_file(self, value: Union[str, None]) -> None:
         self._current_file = value
-        self.state.set_toml_file(pathlib.Path(value))
+        self.state.set_toml_file(
+            pathlib.Path(value) if value is not None else None
+        )
 
     def write_to_file(
         self, file: pathlib.Path, model: models.TomlModel
@@ -534,7 +549,7 @@ class MainWindowState(abc.ABC):
 
     def set_toml_file(
         self,
-        toml_file: pathlib.Path,
+        toml_file: Optional[pathlib.Path],
     ) -> None: ...
     def data_modified(self, toml_model: models.TomlModel): ...
 
@@ -544,8 +559,16 @@ class MainWindowState(abc.ABC):
 
 
 class StateUtility:
-    @staticmethod
-    def set_toml_file(context: MainWindow, toml_file: pathlib.Path) -> None:
+    @classmethod
+    def set_toml_file(
+        cls, context: MainWindow, toml_file: Optional[pathlib.Path]
+    ) -> None:
+        if toml_file is None:
+            context.save_action.setEnabled(False)
+            context.toml_view.setModel(None)
+            if context.toml_file is not None:
+                context.toml_file = None
+            return
         try:
             model = context.load_toml_strategy(pathlib.Path(toml_file))
             model.dataChanged.connect(
@@ -556,8 +579,9 @@ class StateUtility:
             galatea.merge_data.BadMappingFileError,
             galatea.merge_data.BadMappingDataError,
         ) as e:
-            context.save_action.setEnabled(False)
-            context.toml_view.setModel(None)
+            cls.reset_workspace(context)
+            if context.toml_file is not None:
+                context.toml_file = None
             context.status_message_updated.emit(e.details, logging.ERROR)
             context.status_message_updated.emit(
                 f"Unable to open {pathlib.Path(toml_file).name}", logging.INFO
@@ -574,37 +598,42 @@ class StateUtility:
         context.state = FileLoadedUnmodifiedState(context)
 
     @staticmethod
+    def reset_workspace(context: MainWindow) -> None:
+        context.setWindowTitle("TOML Editor")
+        context.save_action.setEnabled(False)
+        context.toml_view.setModel(None)
+        context.state = NoDocumentLoadedState(context)
+
+    @classmethod
     def update_window(
-        context: MainWindow, toml_model: Optional[models.TomlModel]
+        cls, context: MainWindow, toml_model: Optional[models.TomlModel]
     ) -> None:
         if toml_model is None:
-            context.setWindowTitle("TOML Editor")
-            context.save_action.setEnabled(False)
+            # Then nothing is loaded and should be an empty document
+            cls.reset_workspace(context)
             return
 
-        if context.is_model_data_different_than_file(
-            pathlib.Path(context.toml_file), toml_model
-        ):
-            context.save_action.setEnabled(True)
-            file_name = pathlib.Path(context.toml_file).name
-            context.setWindowTitle(f"TOML Editor: {file_name} (Unsaved)")
-            context.state = FileLoadedModifiedState(context)
-        else:
-            context.state = FileLoadedUnmodifiedState(context)
-
-            context.setWindowTitle(
-                f"TOML Editor: {pathlib.Path(context.toml_file).name}"
-            )
-            context.save_action.setEnabled(False)
+        if context.toml_file is not None:
+            toml_file = pathlib.Path(context.toml_file)
+            if context.unsaved_changes:
+                context.save_action.setEnabled(True)
+                context.setWindowTitle(
+                    f"TOML Editor: {toml_file.name} (Unsaved)"
+                )
+                context.state = FileLoadedModifiedState(context)
+            else:
+                context.save_action.setEnabled(False)
+                context.setWindowTitle(f"TOML Editor: {toml_file.name}")
+                context.state = FileLoadedUnmodifiedState(context)
 
 
 class NoDocumentLoadedState(MainWindowState):
-    def set_toml_file(self, toml_file: pathlib.Path) -> None:
+    def set_toml_file(self, toml_file: Optional[pathlib.Path]) -> None:
         StateUtility.set_toml_file(context=self.context, toml_file=toml_file)
 
 
 class FileLoadedModifiedState(MainWindowState):
-    def set_toml_file(self, toml_file: pathlib.Path) -> None:
+    def set_toml_file(self, toml_file: Optional[pathlib.Path]) -> None:
         StateUtility.set_toml_file(context=self.context, toml_file=toml_file)
         StateUtility.update_window(
             context=self.context,
@@ -624,7 +653,7 @@ class FileLoadedModifiedState(MainWindowState):
 
 
 class FileLoadedUnmodifiedState(MainWindowState):
-    def set_toml_file(self, toml_file: pathlib.Path) -> None:
+    def set_toml_file(self, toml_file: Optional[pathlib.Path]) -> None:
         StateUtility.set_toml_file(context=self.context, toml_file=toml_file)
 
     def data_modified(self, toml_model: models.TomlModel) -> None:

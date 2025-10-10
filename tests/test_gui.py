@@ -479,8 +479,7 @@ class TestStateUtility:
         main_window.setWindowTitle.assert_called_once_with("TOML Editor")
 
     def test_update_window_no_changes_set_to_unmodified_state(self):
-        main_window = Mock(toml_file="dummy.toml")
-        main_window.is_model_data_different_than_file = lambda *_: False
+        main_window = Mock(toml_file="dummy.toml", unsaved_changes = False)
         toml_model = Mock()
         gce.gui.StateUtility.update_window(main_window, toml_model)
         assert isinstance(main_window.state, gce.gui.FileLoadedUnmodifiedState)
