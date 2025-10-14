@@ -91,13 +91,13 @@ class TestLineEditSyntaxHighlighting:
             line_edit.text = test_value
         assert spy.count() == 1
 
-    def test_pressing_entier_emits_edit_finished_signal(self, qtbot):
+    def test_pressing_tab_emits_edit_finished_signal(self, qtbot):
         line_edit = gui.LineEditSyntaxHighlighting()
         qtbot.addWidget(line_edit)
         spy = QtTest.QSignalSpy(line_edit.editingFinished)
         with qtbot.waitSignal(line_edit.editingFinished):
             qtbot.keyClicks(line_edit, "Some text")
-            qtbot.keyPress(line_edit, QtCore.Qt.Key.Key_Return)
+            qtbot.keyPress(line_edit, QtCore.Qt.Key.Key_Tab)
         assert spy.count() == 1
 
     def test_style_setting(self):

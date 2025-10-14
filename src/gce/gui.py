@@ -277,10 +277,6 @@ class LineEditSyntaxHighlighting(QtWidgets.QPlainTextEdit):
         )
         self.setTabChangesFocus(True)
 
-        # Set a fixed height based on font metrics for a single line
-        font_metrics = self.fontMetrics()
-        line_height = font_metrics.height() + self.padding  # Add some padding
-        self.setFixedHeight(line_height)
         self.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
             QtWidgets.QSizePolicy.Policy.Fixed,
@@ -309,11 +305,7 @@ class LineEditSyntaxHighlighting(QtWidgets.QPlainTextEdit):
                 self.style_colors_changed.emit()
 
     def keyPressEvent(self, event):
-        # Prevent newlines (Enter key)
-        if (
-            event.key() == QtCore.Qt.Key.Key_Return
-            or event.key() == QtCore.Qt.Key.Key_Enter
-        ):
+        if event.key() == QtCore.Qt.Key.Key_Tab:
             self.editingFinished.emit()
             return
         super().keyPressEvent(event)
