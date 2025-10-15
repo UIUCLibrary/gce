@@ -338,3 +338,52 @@ class TestMappingNode:
         model = models.MappingNode()
         model.children = children
         assert model.key == expected
+
+def test_serialize_dict_to_toml_str():
+    data = {
+        "mappings": {
+            "identifier_key": "Bibliographic Identifier",
+        },
+        "mapping": [
+                {
+                    "key": "Date",
+                    "delimiter": "||",
+                    "existing_data": "replace",
+                    "serialize_method": "jinja2template",
+                    "jinja_template": '''{% if fields['260'] | length > 0 %}
+{% for field in fields['260'] %}
+{{field.a}}
+{% endfor %}
+{% elif fields['264$c'] | length > 0 %}
+{% for field in fields['264'] %}
+{{field['264'].c}}
+{{field['c']}}
+{% endfor %}
+{% endif %}
+'''
+            }
+        ]
+    }
+    result = models.serialize_dict_to_toml_str(data)
+    assert result == '''
+[mappings]
+identifier_key = "Bibliographic Identifier"
+
+[[mapping]]
+key = "Date"
+delimiter = "||"
+existing_data = "replace"
+serialize_method = "jinja2template"
+jinja_template = """
+{% if fields['260'] | length > 0 %}
+{% for field in fields['260'] %}
+{{field.a}}
+{% endfor %}
+{% elif fields['264$c'] | length > 0 %}
+{% for field in fields['264'] %}
+{{field['264'].c}}
+{{field['c']}}
+{% endfor %}
+{% endif %}
+"""
+'''.lstrip('\n')
