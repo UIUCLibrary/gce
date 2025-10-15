@@ -182,25 +182,27 @@ wheels = [
 
 [[package]]
 name = "galatea"
-version = "0.4.1"
+version = "0.4.2"
 source = { registry = "https://nexus.library.illinois.edu/repository/uiuc_prescon_python/simple" }
 dependencies = [
     { name = "argcomplete" },
     { name = "jinja2" },
     { name = "requests" },
 ]
+sdist = { url = "https://nexus.library.illinois.edu/repository/uiuc_prescon_python/packages/galatea/0.4.2/galatea-0.4.2.tar.gz", hash = "sha256:55385c7d8a92b996829f33530ce598208bc2a784014ff7d9a12d2c5f1e8894da" }
 wheels = [
-    { url = "https://nexus.library.illinois.edu/repository/uiuc_prescon_python/packages/galatea/0.4.1/galatea-0.4.1-py3-none-any.whl", hash = "sha256:b7a9a3cd638e38309a2766e10cba2f1675624da76147a7baf33b992e86bbdae2" },
+    { url = "https://nexus.library.illinois.edu/repository/uiuc_prescon_python/packages/galatea/0.4.2/galatea-0.4.2-py3-none-any.whl", hash = "sha256:896e7081eb45fcdb19f702200f44209c8a1a02cf432f4786b4b2c64feb559f01" },
 ]
 
 [[package]]
 name = "gce"
-version = "0.0.1"
+version = "0.0.3.dev0"
 source = { editable = "." }
 dependencies = [
     { name = "galatea" },
     { name = "pygments" },
     { name = "pyside6-essentials" },
+    { name = "tomli-w" },
 ]
 
 [package.dev-dependencies]
@@ -235,9 +237,10 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "galatea", specifier = ">=0.4.1", index = "https://nexus.library.illinois.edu/repository/uiuc_prescon_python/simple" },
+    { name = "galatea", specifier = ">=0.4.2", index = "https://nexus.library.illinois.edu/repository/uiuc_prescon_python/simple" },
     { name = "pygments", specifier = ">=2.19.2" },
     { name = "pyside6-essentials", specifier = ">=6.9.2" },
+    { name = "tomli-w", specifier = ">=1.2.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -653,6 +656,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/52/c4/09e902f5612a509cef2c8712c516e4fe44f3a1ae9fcd8921baddb5e6bae4/shiboken6-6.9.2-cp39-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:a5f5985938f5acb604c23536a0ff2efb3cccb77d23da91fbaff8fd8ded3dceb4", size = 202784, upload-time = "2025-08-26T07:52:43.172Z" },
     { url = "https://files.pythonhosted.org/packages/a4/ea/a56b094a4bf6facf89f52f58e83684e168b1be08c14feb8b99969f3d4189/shiboken6-6.9.2-cp39-abi3-win_amd64.whl", hash = "sha256:68c33d565cd4732be762d19ff67dfc53763256bac413d392aa8598b524980bc4", size = 1152089, upload-time = "2025-08-26T07:52:45.162Z" },
     { url = "https://files.pythonhosted.org/packages/48/64/562a527fc55fbf41fa70dae735929988215505cb5ec0809fb0aef921d4a0/shiboken6-6.9.2-cp39-abi3-win_arm64.whl", hash = "sha256:c5b827797b3d89d9b9a3753371ff533fcd4afc4531ca51a7c696952132098054", size = 1708948, upload-time = "2025-08-26T07:52:48.016Z" },
+]
+
+[[package]]
+name = "tomli-w"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/19/75/241269d1da26b624c0d5e110e8149093c759b7a286138f4efd61a60e75fe/tomli_w-1.2.0.tar.gz", hash = "sha256:2dd14fac5a47c27be9cd4c976af5a12d87fb1f0b4512f81d69cce3b35ae25021", size = 7184, upload-time = "2025-01-15T12:07:24.262Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c7/18/c86eb8e0202e32dd3df50d43d7ff9854f8e0603945ff398974c1d91ac1ef/tomli_w-1.2.0-py3-none-any.whl", hash = "sha256:188306098d013b691fcadc011abd66727d3c414c571bb01b1a174ba8c983cf90", size = 6675, upload-time = "2025-01-15T12:07:22.074Z" },
 ]
 
 [[package]]
