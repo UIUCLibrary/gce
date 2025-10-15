@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import abc
+import functools
 import pathlib
 import xml.etree.ElementTree as ET
 import logging
 import typing
-from typing import Type, Optional, Union
+from typing import Type, Optional, Union, Callable
+from xml.dom import minidom
+from xml.parsers.expat import ExpatError
 
 import jinja2
 from PySide6 import QtWidgets, QtCore, QtGui
@@ -18,6 +21,7 @@ from gce import models
 if typing.TYPE_CHECKING:
     from pygments.style import Style as PygmentsStyle
 
+__all__ = ["JinjaEditorDialog"]
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +73,19 @@ class XMLViewer(QtWidgets.QTextEdit):
         self._highlighter = PygmentsHighlighter(parent=self.document())
         self._highlighter.lexer = pygments.lexers.get_lexer_by_name("xml")
         self.setFont(
-            QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont)
+            QtGui.QFontDatabase.systemFont(
+                QtGui.QFontDatabase.SystemFont.FixedFont
+            )
+        )
+        self.setContextMenuPolicy(
+            QtCore.Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self.customContextMenuRequested.connect(
+            lambda pos: xml_text_box_context_menu(self, pos)
+        )
+        self.load_file_strategy = load_xml_view_file_data
+        self.reflow_data_strategy = functools.partial(
+            reflow_xml_data, reflow_strategy=reflow_xml_using_minidom
         )
 
     @property
@@ -84,6 +100,73 @@ class XMLViewer(QtWidgets.QTextEdit):
         ):
             self._highlighter.style = pygments.styles.get_style_by_name(value)
             self.style_colors_changed.emit()
+
+
+def xml_text_box_context_menu(
+    parent: XMLViewer,
+    pos: QtCore.QPoint,
+    starting_menu_factory: Callable[
+        [QtWidgets.QTextEdit], QtWidgets.QMenu
+    ] = QtWidgets.QTextEdit.createStandardContextMenu,
+    action_build_factory: Callable[
+        [str, QtWidgets.QWidget], QtGui.QAction
+    ] = QtGui.QAction,
+):
+    # Get standard menu actions
+    menu = starting_menu_factory(parent)
+
+    menu.setParent(parent)
+    menu.addSeparator()
+
+    load_from_file_action = action_build_factory("Open from File", parent)
+    load_from_file_action.triggered.connect(
+        lambda: parent.load_file_strategy(parent)
+    )
+    menu.addAction(load_from_file_action)
+
+    reflow_xml_file_action = action_build_factory("Reflow XML Data", parent)
+    reflow_xml_file_action.triggered.connect(
+        lambda: parent.reflow_data_strategy(parent)
+    )
+    reflow_xml_file_action.setEnabled(parent.toPlainText().strip() != "")
+    menu.addAction(reflow_xml_file_action)
+    menu.exec(parent.mapToGlobal(pos))
+
+
+def load_xml_view_file_data(
+    viewer: XMLViewer,
+    file_dialog_strategy: Callable[
+        [XMLViewer], typing.Tuple[str, str]
+    ] = functools.partial(
+        QtWidgets.QFileDialog.getOpenFileName,
+        caption="Open File",
+        dir="",
+        filter="Xml Files (*.xml);;All Files (*)",
+    ),
+) -> None:
+    file_name, _ = file_dialog_strategy(viewer)
+    if file_name:
+        with open(file_name, "r") as f:
+            viewer.setText(f.read())
+
+
+def reflow_xml_using_minidom(xml_data: str) -> str:
+    dom = minidom.parseString(xml_data)
+    pretty_xml_str = dom.toprettyxml(indent=" " * 4)
+    lines = pretty_xml_str.split("\n")
+    return "\n".join(line for line in lines if line.strip())
+
+
+def reflow_xml_data(
+    viewer: XMLViewer, reflow_strategy: Callable[[str], str]
+) -> None:
+    xml_string = viewer.toPlainText()
+    if not xml_string:
+        return
+    try:
+        viewer.setText(reflow_strategy(xml_string))
+    except ExpatError as e:
+        logger.error("XML parser error: %s", e)
 
 
 class _JinjaEditor(QtWidgets.QWidget):

@@ -2,13 +2,14 @@ import io
 import logging
 import os
 import pathlib
+import xml
 from unittest.mock import Mock, ANY, MagicMock, patch, mock_open
 
 import galatea.merge_data
 import pygments.lexer
 import pygments.style
 import pytest
-from PySide6 import QtWidgets, QtCore, QtTest
+from PySide6 import QtWidgets, QtCore, QtTest, QtGui
 
 import gce.gui
 import gce.models
@@ -479,7 +480,7 @@ class TestStateUtility:
         main_window.setWindowTitle.assert_called_once_with("TOML Editor")
 
     def test_update_window_no_changes_set_to_unmodified_state(self):
-        main_window = Mock(toml_file="dummy.toml", unsaved_changes = False)
+        main_window = Mock(toml_file="dummy.toml", unsaved_changes=False)
         toml_model = Mock()
         gce.gui.StateUtility.update_window(main_window, toml_model)
         assert isinstance(main_window.state, gce.gui.FileLoadedUnmodifiedState)
@@ -521,3 +522,85 @@ def test_load_toml_bad_mapping_data_passes_to_bad_mapping_file(mock_file_open):
             pathlib.Path("somefile"), load_strategy=load_strategy
         )
     assert error.value.source == pathlib.Path("somefile")
+
+
+@pytest.mark.parametrize("text,expected", [("", False), ("something", True)])
+def test_xml_text_box_context_menu_flow_enable_only_when_xml_data(
+    qtbot, text, expected
+):
+    xml_widget = gce.gui.XMLViewer()
+    xml_widget.setText(text)
+    qtbot.addWidget(xml_widget)
+    menu = QtWidgets.QMenu()
+    menu.exec = Mock("exec")
+    actions = {}
+
+    def action_build_factory(action_text: str, parent):
+        # Capture the action and store it in the actions variable for testing
+        nonlocal actions
+        actions[action_text] = QtGui.QAction(text, parent)
+        actions[action_text].setEnabled = Mock(name="setEnabled")
+        return actions[action_text]
+
+    gce.gui.xml_text_box_context_menu(
+        xml_widget,
+        QtCore.QPoint(0, 0),
+        starting_menu_factory=lambda _: menu,
+        action_build_factory=action_build_factory,
+    )
+
+    actions["Reflow XML Data"].setEnabled.assert_called_once_with(expected)
+
+
+@pytest.mark.parametrize(
+    "dialog_return_data, set_text_called",
+    [
+        ("somefileName", True),
+        (None, False),
+    ],
+)
+def test_load_xml_view_file_data_sets_text(
+    dialog_return_data, set_text_called
+):
+    viewer = Mock(spec_set=gui.XMLViewer)
+    file_dialog_strategy = Mock(return_value=(dialog_return_data, ""))
+    with patch("builtins.open"):
+        gui.load_xml_view_file_data(viewer, file_dialog_strategy)
+    assert viewer.setText.called is set_text_called
+
+
+@pytest.mark.parametrize(
+    "xml_data, expected_reflow_strategy_called",
+    [
+        ("", False),
+        ("<xml> </xml>", True),
+    ],
+)
+def test_reflow_xml_data_calls_only_if_data(
+    qtbot, xml_data, expected_reflow_strategy_called
+):
+    viewer = gce.gui.XMLViewer()
+    viewer.setText(xml_data)
+    qtbot.addWidget(viewer)
+    reflow_strategy = Mock(return_value="")
+    gce.gui.reflow_xml_data(viewer, reflow_strategy=reflow_strategy)
+    assert reflow_strategy.called is expected_reflow_strategy_called
+
+
+def test_reflow_xml_logs_expat_error(qtbot, caplog):
+    caplog.set_level(logging.ERROR)
+    viewer = gce.gui.XMLViewer()
+    viewer.setText("some text that should cause an error")
+    qtbot.addWidget(viewer)
+    reflow_strategy = Mock(
+        side_effect=xml.parsers.expat.ExpatError("something went wrong")
+    )
+    gce.gui.reflow_xml_data(viewer, reflow_strategy=reflow_strategy)
+    assert caplog.records[0].levelname == "ERROR"
+
+
+def test_reflow_xml_using_minidom():
+    assert (
+        gce.gui.reflow_xml_using_minidom("<xml> </xml>")
+        == '<?xml version="1.0" ?>\n<xml> </xml>'
+    )
