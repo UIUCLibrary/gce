@@ -12,15 +12,16 @@ PROJECT_ROOT=$(realpath "$scriptDir/..")
 
 create_standalone(){
     uv_path=$1
-    echo 'create_standalone'
-    shift;
-
+    python_exec=$2
+    echo 'Creating standalone MacOS Application'
+#     shift;
 #     Generates the .egg-info needed for the version metadata
 #     temp_dir=$(mktemp -d)
 #     trap 'echo "Cleaning up temporary build environment" && rm -rf ${temp_dir}' RETURN
 #     UV_PROJECT_ENVIRONMENT="${temp_dir}/build_mac_standalone_venv" $uv_path build --wheel
     BOOTSTRAP_SCRIPT="${scriptDir}/create_standalone/bootstrap_standalone.py"
-    $uv_path run --isolated --frozen --no-managed-python --group freeze --no-dev "$FREEZE_SCRIPT" gce "$BOOTSTRAP_SCRIPT" ${WITH_DEBUG:+--build-with-debug}
+    $uv_path run ${python_exec:+--python ${python_exec}} --isolated --frozen --no-managed-python --group freeze --no-dev "$FREEZE_SCRIPT" gce "$BOOTSTRAP_SCRIPT" ${WITH_DEBUG:+--build-with-debug}
+    echo "Done"
 }
 
 
@@ -32,6 +33,26 @@ create_venv() {
     python -m pip install --disable-pip-version-check uv
     deactivate
 }
+python_exec=
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --python)
+            shift
+            if [[ -n "$1" ]]; then
+                python_exec="$1"
+            else
+                echo "Error: --python requires a value."
+                exit 1
+            fi
+            ;;
+        *)
+            echo "Unknown argument: $1"
+            exit 1
+            ;;
+    esac
+    shift
+done
 
 if ! command -v uv 2>&1 >/dev/null
 then
@@ -45,4 +66,4 @@ else
     uv_exec=$(which uv)
 fi
 
-create_standalone $uv_exec
+create_standalone $uv_exec $python_exec
