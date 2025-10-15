@@ -11,8 +11,9 @@ import typing
 
 import galatea.merge_data
 from PySide6 import QtCore
-import tomllib
-import tomli_w
+import tomlkit
+import tomlkit.exceptions
+
 
 T = TypeVar("T")
 
@@ -307,10 +308,9 @@ def convert_item_model_to_dictionary(
 
 def load_toml_fp(fp: io.TextIOBase) -> TomlModel:
     try:
-        data: TomlConfigFormat = typing.cast(
-            TomlConfigFormat, tomllib.loads(fp.read())
-        )
-    except tomllib.TOMLDecodeError as error:
+
+        data = tomlkit.loads(fp.read())
+    except tomlkit.exceptions.ParseError as error:
         raise galatea.merge_data.BadMappingDataError(
             details=str(error)
         ) from error
@@ -327,12 +327,51 @@ def load_toml_fp(fp: io.TextIOBase) -> TomlModel:
         ) from error
     return model
 
+def serialize_dict_to_toml_str(data) -> str:
+    document = tomlkit.document()
+    mappings = tomlkit.table()
+    data_mappings = data["mappings"]
+    data_mapping_list = data.get('mapping', [])
+    mappings.add("identifier_key", data_mappings['identifier_key'])
+    document["mappings"] = mappings
+    document.add(tomlkit.nl())
+    mapping_array = tomlkit.aot()
+    for data_mapping in data_mapping_list:
+        new_mapping = tomlkit.table()
+        new_mapping.update(data_mapping.items())
+        if "jinja_template" in data_mapping:
+            if len(data_mapping["jinja_template"].split("\n")) > 1:
+                new_mapping["jinja_template"] =  tomlkit.string(f'\n{data_mapping["jinja_template"]}', multiline=True)
+        mapping_array.append(new_mapping)
+    document['mapping'] = mapping_array
+    return document.as_string()
 
-def export_toml(model: TomlModel) -> str:
-    return tomli_w.dumps(convert_item_model_to_dictionary(model))
+def export_toml(model: TomlModel, serialize_strategy=serialize_dict_to_toml_str) -> str:
+    return serialize_strategy(convert_item_model_to_dictionary(model))
 
 
 def data_has_changed(original_toml_text: str, model: TomlModel) -> bool:
-    return tomllib.loads(
-        original_toml_text
-    ) != convert_item_model_to_dictionary(model)
+    og = tomlkit.loads(original_toml_text)
+    current = convert_item_model_to_dictionary(model)
+    # First, do a simple check is exactly the same.
+    if og == current:
+        return False
+
+    # However, the order can change even if the data hasn't changed. No need to
+    # have the user resave if it's just an order of the keys have changed
+    all_mappings_keys = set(list(og['mappings'].keys()) + list(current['mappings'].keys()))
+
+    for k in all_mappings_keys:
+        # Make sure that keys are the same in both, but ignore order
+        for model in [og, current]:
+            if k not in model['mappings']:
+                return False
+        # Compare the values
+        if og['mappings'][k] != current['mappings'][k]:
+            return True
+
+    for i,_ in enumerate(og['mapping']):
+        if current['mapping'][i] != og['mapping'][i]:
+            if dict(current['mapping'][i]) != dict(og['mapping'][i]):
+                return True
+    return False
