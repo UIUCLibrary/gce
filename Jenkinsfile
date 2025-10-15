@@ -205,6 +205,7 @@ pipeline {
                             }
                             environment{
                                 UV_CONFIG_FILE=createUVConfig()
+                                PYINSTALLER_CONFIG_DIR="${env.WORKSPACE}/pyinstaller_config"
                             }
                             steps{
                                 sh(label: 'Creating a .dmg installer', script: 'scripts/create_mac_distrib.sh')
@@ -253,6 +254,7 @@ pipeline {
                             }
                             environment{
                                 UV_CONFIG_FILE=createUVConfig()
+                                PYINSTALLER_CONFIG_DIR="${env.WORKSPACE}/pyinstaller_config"
                             }
                             steps{
                                 sh(label: 'Creating a .dmg installer', script: 'scripts/create_mac_distrib.sh')
