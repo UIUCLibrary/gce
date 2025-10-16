@@ -16,7 +16,7 @@ import pygments.styles
 import pygments.lexers
 import galatea
 from galatea.merge_data import serialize_with_jinja_template, MappingConfig
-from gce import models
+from gce import models, editors
 
 if typing.TYPE_CHECKING:
     from pygments.style import Style as PygmentsStyle
@@ -478,6 +478,58 @@ class PygmentsHighlighter(QtGui.QSyntaxHighlighter):
                 logger.warning("%s was called but not implemented", token_type)
 
 
+class TomlDataEditDelegateWidgetSelector(QtWidgets.QStyledItemDelegate):
+
+    def __init__(self, /, parent=...):
+        super().__init__(parent)
+
+    def createEditor(self, parent, option, index: QtCore.QModelIndex, /):
+        item: models.TomlNode = index.data(QtCore.Qt.ItemDataRole.UserRole)
+        if factory := item.editor_delegate_factory():
+            delegate = factory(parent=parent)
+            delegate.setAutoFillBackground(True)
+            if isinstance(delegate, QtWidgets.QTextEdit):
+                print(f"here with {delegate.toPlainText()}")
+            return delegate
+        return super().createEditor(parent, option, index)
+
+    def setModelData(self, editor, model, index, /):
+        if isinstance(editor, editors.StringListEditor):
+            model.setData(index, editor.values)
+        elif isinstance(editor, editors.EditorWithToolBox):
+            data = editor.get_data()
+            if data is not None:
+                model.setData(index, data)
+        elif isinstance(editor, QtWidgets.QTextEdit):
+            model.setData(index, editor.toPlainText())
+        else:
+            super().setModelData(editor, model, index)
+
+    def setEditorData(self, editor, index, /):
+        if not index.isValid():
+            return
+        elif isinstance(editor, editors.StringListEditor):
+            editor.values = index.data(role=QtCore.Qt.ItemDataRole.UserRole).value
+        elif isinstance(editor, editors.EditorWithToolBox):
+            editor.set_data(index.data(role=QtCore.Qt.ItemDataRole.UserRole))
+        if isinstance(editor, QtWidgets.QTextEdit):
+            editor.setText(index.data())
+        super().setEditorData(editor, index)
+
+    def updateEditorGeometry(self, editor, option, index, /):
+        if isinstance(index.data(role=QtCore.Qt.ItemDataRole.UserRole).value, list):
+            item_rect = option.rect
+            oversized_height = item_rect.height() * 5
+            editor.setGeometry(item_rect.x(), item_rect.y(), item_rect.width(), oversized_height)
+            return
+        super().updateEditorGeometry(editor, option, index)
+
+
+    def paint(self, painter, option: QtWidgets.QStyleOptionViewItem, index, /):
+        super().paint(painter, option, index)
+        if isinstance(index.data(role=QtCore.Qt.ItemDataRole.UserRole).value, list):
+            painter.setClipping(False)
+
 class TomlView(QtWidgets.QTreeView):
     def __init__(self, parent: QtWidgets.QWidget) -> None:
         super().__init__(parent)
@@ -522,10 +574,14 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.toml_view = TomlView(parent=self)
+        self._delegate = TomlDataEditDelegateWidgetSelector(self.toml_view)
         self.toml_view.setAlternatingRowColors(True)
+        self.toml_view.setUniformRowHeights(False)
+        self.toml_view.setAnimated(True)
+        self.toml_view.setItemDelegateForColumn(1, self._delegate)
+
         self._current_file: Optional[str] = None
         self.setCentralWidget(self.toml_view)
-        # self.setWindowTitle("TOML Editor")
         toolbar = QtWidgets.QToolBar("File Toolbar")
         self.addToolBar(QtCore.Qt.ToolBarArea.LeftToolBarArea, toolbar)
         toolbar.setMovable(False)
