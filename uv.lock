@@ -277,7 +277,7 @@ wheels = [
 
 [[package]]
 name = "gce"
-version = "0.0.4.dev0"
+version = "0.0.4"
 source = { editable = "." }
 dependencies = [
     { name = "galatea" },
