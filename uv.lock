@@ -182,16 +182,16 @@ wheels = [
 
 [[package]]
 name = "galatea"
-version = "0.4.2"
+version = "0.5.0"
 source = { registry = "https://nexus.library.illinois.edu/repository/uiuc_prescon_python/simple" }
 dependencies = [
     { name = "argcomplete" },
     { name = "jinja2" },
     { name = "requests" },
 ]
-sdist = { url = "https://nexus.library.illinois.edu/repository/uiuc_prescon_python/packages/galatea/0.4.2/galatea-0.4.2.tar.gz", hash = "sha256:55385c7d8a92b996829f33530ce598208bc2a784014ff7d9a12d2c5f1e8894da" }
+sdist = { url = "https://nexus.library.illinois.edu/repository/uiuc_prescon_python/packages/galatea/0.5.0/galatea-0.5.0.tar.gz", hash = "sha256:0401f6ea31001789098925b9989a271a875710e0bb932819cc5ad29ecac2eae9" }
 wheels = [
-    { url = "https://nexus.library.illinois.edu/repository/uiuc_prescon_python/packages/galatea/0.4.2/galatea-0.4.2-py3-none-any.whl", hash = "sha256:896e7081eb45fcdb19f702200f44209c8a1a02cf432f4786b4b2c64feb559f01" },
+    { url = "https://nexus.library.illinois.edu/repository/uiuc_prescon_python/packages/galatea/0.5.0/galatea-0.5.0-py3-none-any.whl", hash = "sha256:151305919c8bb70de165186b0737f2344eb61d5d2ff18eb39d46a5e36f2f4957" },
 ]
 
 [[package]]
@@ -237,7 +237,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "galatea", specifier = ">=0.4.2", index = "https://nexus.library.illinois.edu/repository/uiuc_prescon_python/simple" },
+    { name = "galatea", specifier = ">=0.5.0", index = "https://nexus.library.illinois.edu/repository/uiuc_prescon_python/simple" },
     { name = "pygments", specifier = ">=2.19.2" },
     { name = "pyside6-essentials", specifier = ">=6.9.2" },
     { name = "tomli-w", specifier = ">=1.2.0" },
