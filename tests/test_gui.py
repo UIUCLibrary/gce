@@ -144,8 +144,8 @@ class TestJinjaRenderer:
     @pytest.mark.parametrize(
         "jinja_text, expected_text, is_valid",
         [
-            ("{{ fields['040'][0].a }}", "PUL", True),
-            ("{{ fields['040'][0].b }}", "eng", True),
+            ("{{ fields['040'][0][0].value }}", "PUL", True),
+            ("{{ fields['040'][0][1].value }}", "eng", True),
             (
                 "{{ fields['040'][0].b }",
                 "Jinja expression Template Syntax Error : unexpected '}'",
@@ -195,6 +195,7 @@ identifier_key = "Bibliographic Identifier"
 
 [[mapping]]
 key = "Uniform Title"
+serialize_method = "verbatim"
 matching_marc_fields = ["240$a"]
 delimiter = "||"
 existing_data = "keep"
