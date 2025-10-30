@@ -201,7 +201,7 @@ pipeline {
                     stages{
                         stage('Build Application Bundle'){
                             agent{
-                                label 'mac && python3'
+                                label 'mac && python3 && x86_64'
                             }
                             environment{
                                 UV_CONFIG_FILE=createUVConfig()
