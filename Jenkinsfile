@@ -67,7 +67,7 @@ pipeline {
                     environment{
                         PIP_CACHE_DIR='/tmp/pipcache'
                         UV_TOOL_DIR='/tmp/uvtools'
-                        UV_PYTHON_INSTALL_DIR='/tmp/uvpython'
+                        UV_PYTHON_CACHE_DIR='/tmp/uvpython'
                         UV_CACHE_DIR='/tmp/uvcache'
                         UV_CONFIG_FILE=createUVConfig()
                     }
@@ -208,7 +208,7 @@ pipeline {
                                 PYINSTALLER_CONFIG_DIR="${env.WORKSPACE}/pyinstaller_config"
                             }
                             steps{
-                                sh(label: 'Creating a .dmg installer', script: 'scripts/create_mac_distrib.sh')
+                                sh(label: 'Creating a .dmg installer', script: 'scripts/create_mac_distrib.sh --python 3.13+gil')
                                 archiveArtifacts artifacts: 'dist/*.dmg', fingerprint: true
                                 stash includes: 'dist/*.dmg', name: 'APPLE_APPLICATION_X86_64'
                             }
@@ -301,7 +301,7 @@ pipeline {
                     environment{
                         PIP_CACHE_DIR='C:\\Users\\ContainerUser\\Documents\\cache\\pipcache'
                         UV_TOOL_DIR='C:\\Users\\ContainerUser\\Documents\\cache\\uvtools'
-                        UV_PYTHON_INSTALL_DIR='C:\\Users\\ContainerUser\\Documents\\cache\\uvpython'
+                        UV_PYTHON_CACHE_DIR='C:\\Users\\ContainerUser\\Documents\\cache\\uvpython'
                         UV_CACHE_DIR='C:\\Users\\ContainerUser\\Documents\\cache\\uvcache'
                         VC_RUNTIME_INSTALLER_LOCATION='c:\\msvc_runtime'
                     }
@@ -311,7 +311,7 @@ pipeline {
                                dockerfile {
                                    filename 'ci/docker/windows/Dockerfile'
                                    label 'windows && x86_64 && docker'
-                                   args "--mount type=volume,source=uv_python_install_dir,target=${env.UV_PYTHON_INSTALL_DIR} " \
+                                   args "--mount type=volume,source=uv_python_cache_dir,target=${env.UV_PYTHON_CACHE_DIR} " \
                                       + "--mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR} " \
                                       + "--mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR} " \
                                       + "--mount type=volume,source=msvc-runtime,target=${env.VC_RUNTIME_INSTALLER_LOCATION}"
