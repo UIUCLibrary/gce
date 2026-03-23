@@ -208,7 +208,7 @@ pipeline {
                                 PYINSTALLER_CONFIG_DIR="${env.WORKSPACE}/pyinstaller_config"
                             }
                             steps{
-                                sh(label: 'Creating a .dmg installer', script: 'scripts/create_mac_distrib.sh')
+                                sh(label: 'Creating a .dmg installer', script: 'scripts/create_mac_distrib.sh --python 3.13+gil')
                                 archiveArtifacts artifacts: 'dist/*.dmg', fingerprint: true
                                 stash includes: 'dist/*.dmg', name: 'APPLE_APPLICATION_X86_64'
                             }
