@@ -95,7 +95,7 @@ pipeline {
                             parallel{
                                 stage('uv-secure'){
                                     steps{
-                                        catchError(buildResult: 'SUCCESS', message: 'uv-secure found issues', stageResult: 'UNSTABLE') {
+                                        catchError(buildResult: 'UNSTABLE', message: 'uv-secure found issues', stageResult: 'UNSTABLE') {
                                             sh(label: 'Audit Requirement Freeze File', script: 'uv run --only-group=audit-dependencies --frozen --isolated uv-secure --disable-cache uv.lock')
                                         }
                                     }
