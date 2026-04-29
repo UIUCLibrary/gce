@@ -258,12 +258,10 @@ pipeline {
                             }
                             steps{
                                 sh(label: 'Creating a .dmg installer', script: 'scripts/create_mac_distrib.sh')
+                            archiveArtifacts artifacts: 'dist/*.dmg', fingerprint: true
+                            stash includes: 'dist/*.dmg', name: 'APPLE_APPLICATION_ARM64'
                             }
                             post{
-                                success{
-                                    archiveArtifacts artifacts: 'dist/*.dmg', fingerprint: true
-                                    stash includes: 'dist/*.dmg', name: 'APPLE_APPLICATION_ARM64'
-                                }
                                 cleanup{
                                     sh "${tool(name: 'Default', type: 'git')} clean -dfx"
                                 }
