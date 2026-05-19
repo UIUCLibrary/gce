@@ -294,7 +294,6 @@ pipeline {
                 stage('Windows Installer for x86_64'){
                     when{
                         equals expected: true, actual: params.PACKAGE_WINDOWS_INSTALLER
-                        beforeAgent true
                     }
                     environment{
                         PIP_CACHE_DIR='C:\\Users\\ContainerUser\\Documents\\cache\\pipcache'
@@ -315,6 +314,11 @@ pipeline {
                                         "--mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR} " +
                                         "--mount type=volume,source=msvc-runtime,target=${env.VC_RUNTIME_INSTALLER_LOCATION}"
                                }
+                            }
+                            when{
+                                equals expected: true, actual: params.PACKAGE_WINDOWS_INSTALLER
+                                beforeAgent true
+                                beforeOptions true
                             }
                             environment{
                                 UV_CONFIG_FILE=createUVConfig()
@@ -352,6 +356,11 @@ pipeline {
                                     image 'mcr.microsoft.com/windows/servercore:ltsc2022'
                                     label 'windows && docker && x86_64'
                                 }
+                            }
+                            when{
+                                equals expected: true, actual: params.PACKAGE_WINDOWS_INSTALLER
+                                beforeAgent true
+                                beforeOptions true
                             }
                             options {
                                 skipDefaultCheckout true
