@@ -75,7 +75,7 @@ pipeline {
                         dockerfile {
                             filename 'ci/docker/linux/jenkins/Dockerfile'
                             label 'linux && docker'
-                            args '--mount source=gce_cache,target=/tmp'
+                            args "--label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" --mount source=gce_cache,target=/tmp"
                         }
                     }
                     when{
@@ -93,10 +93,10 @@ pipeline {
                         }
                         stage('Run Tests'){
                             parallel{
-                                stage('uv-secure'){
+                                stage('uv audit'){
                                     steps{
-                                        catchError(buildResult: 'UNSTABLE', message: 'uv-secure found issues', stageResult: 'UNSTABLE') {
-                                            sh(label: 'Audit Requirement Freeze File', script: 'uv run uv-secure --disable-cache uv.lock')
+                                        catchError(buildResult: 'UNSTABLE', message: 'uv audit found issues', stageResult: 'UNSTABLE') {
+                                            sh(label: 'Audit Requirement Freeze File', script: 'uv audit')
                                         }
                                     }
                                 }
@@ -294,7 +294,6 @@ pipeline {
                 stage('Windows Installer for x86_64'){
                     when{
                         equals expected: true, actual: params.PACKAGE_WINDOWS_INSTALLER
-                        beforeAgent true
                     }
                     environment{
                         PIP_CACHE_DIR='C:\\Users\\ContainerUser\\Documents\\cache\\pipcache'
@@ -309,11 +308,17 @@ pipeline {
                                dockerfile {
                                    filename 'ci/docker/windows/Dockerfile'
                                    label 'windows && x86_64 && docker'
-                                   args "--mount type=volume,source=uv_python_cache_dir,target=${env.UV_PYTHON_CACHE_DIR} " \
-                                      + "--mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR} " \
-                                      + "--mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR} " \
-                                      + "--mount type=volume,source=msvc-runtime,target=${env.VC_RUNTIME_INSTALLER_LOCATION}"
+                                   args "--label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" " +
+                                        "--mount type=volume,source=uv_python_cache_dir,target=${env.UV_PYTHON_CACHE_DIR} " +
+                                        "--mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR} " +
+                                        "--mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR} " +
+                                        "--mount type=volume,source=msvc-runtime,target=${env.VC_RUNTIME_INSTALLER_LOCATION}"
                                }
+                            }
+                            when{
+                                equals expected: true, actual: params.PACKAGE_WINDOWS_INSTALLER
+                                beforeAgent true
+                                beforeOptions true
                             }
                             environment{
                                 UV_CONFIG_FILE=createUVConfig()
@@ -347,10 +352,15 @@ pipeline {
                         stage('Test .msi Installer'){
                             agent {
                                 docker {
-                                    args '-u ContainerAdministrator'
+                                    args "-u ContainerAdministrator --label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\""
                                     image 'mcr.microsoft.com/windows/servercore:ltsc2022'
                                     label 'windows && docker && x86_64'
                                 }
+                            }
+                            when{
+                                equals expected: true, actual: params.PACKAGE_WINDOWS_INSTALLER
+                                beforeAgent true
+                                beforeOptions true
                             }
                             options {
                                 skipDefaultCheckout true
