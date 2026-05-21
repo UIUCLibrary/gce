@@ -60,6 +60,9 @@ pipeline {
         booleanParam(name: 'PACKAGE_WINDOWS_INSTALLER', defaultValue: false, description: 'Create a standalone wix based .msi installer')
         booleanParam(name: 'DEPLOY_STANDALONE_PACKAGERS', defaultValue: false, description: 'Deploy standalone packages')
     }
+    options{
+        preserveStashes()
+    }
     stages{
         stage('Building and Testing'){
             stages{
@@ -323,11 +326,10 @@ pipeline {
                             environment{
                                 UV_CONFIG_FILE=createUVConfig()
                             }
-                            options{
-                                timeout(time: 10, unit: 'MINUTES')
-                            }
                             steps{
-                                bat 'powershell scripts/create-windows-distribution.ps1'
+                                timeout(time: 10, unit: 'MINUTES'){
+                                    bat 'powershell scripts/create-windows-distribution.ps1'
+                                }
                                 archiveArtifacts artifacts: 'dist/*.msi', fingerprint: true
                                 stash includes: 'dist/*.msi', name: 'STANDALONE_WINDOWS_X86_64_INSTALLER'
                                 stash includes: 'ci/jenkins/scripts/**', name: 'JENKINS_SCRIPTS'
